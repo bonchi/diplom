@@ -24,7 +24,7 @@ const float SLOW = -1.f;
 
 vec3 findIntersection(const vec3 &pos, vec3 dir) {
 	vec3 point;
-	if (dir.z == 0 ||pos.z == 0) {
+	if (dir.z == 0 || pos.z == 0) {
 		point = pos + dir * DIST;
 		point.z = 0;
 	} else {
@@ -52,14 +52,14 @@ vec3 buildProjectorPos(const vec3 &camera_pos,const vec3 &point){
 Camera c;
 float tex[4 * width * (height - 1)];
 vec4 cube[8] = {
-	vec4(1., 1., 1.,1.),
-	vec4(1., 1., -1.,1.),
-	vec4(1., -1., 1.,1.),
-	vec4(1., -1., -1.,1.),
-	vec4(-1., -1., 1.,1.),
-	vec4(-1., -1., -1.,1.),
-	vec4(-1., 1., 1.,1.),
-	vec4(-1., 1., -1.,1.)
+	vec4(1., 1., 1., 1.),
+	vec4(1., 1., -1., 1.),
+	vec4(1., -1., 1., 1.),
+	vec4(1., -1., -1., 1.),
+	vec4(-1., -1., 1., 1.),
+	vec4(-1., -1., -1., 1.),
+	vec4(-1., 1., 1., 1.),
+	vec4(-1., 1., -1., 1.)
 };
 GLuint buf_tex;
 
@@ -84,7 +84,7 @@ void display() {
 	}
 	vec4 trap[24];
 	int count = 0;
-	for (int i = 0; i < 8; ++i) {
+	for (int i = 0; i < 4; ++i) {
 		vec4 term = rc[2 * i] - rc[2 * i + 1];
 		if (term.z - term.w * SUPP != 0) {
 			float k = (rc[2 * i + 1].w * SUPP - rc[2 * i + 1].z) / (term.z - term.w * SUPP);
@@ -141,7 +141,7 @@ void display() {
 		}
 
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
-		mat4 m_proj2 = m_range * m_proj;
+		mat4 m_proj2 = m_proj * m_range;
 
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glDrawArrays(GL_LINE_STRIP, 0, width * 2 * (height - 1));
