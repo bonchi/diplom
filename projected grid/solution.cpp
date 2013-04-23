@@ -27,12 +27,11 @@ vec3 buildProjectorPos2(const vec3 &camera_pos) {
 	float x = camera_pos.x;
 	float y = camera_pos.y;
 	float z = camera_pos.z;
-	if ((z < SUPP) && (z > SLOW)) {
-		if (z < 0) {
-			z = SLOW;
-		} else {
-			z = SUPP;
-		}
+	if (z < 0) {
+		z = -z;
+	}
+	if (z < SUPP) {
+		z = SUPP;
 	}
 	return vec3(x, y, z);
 }
@@ -129,7 +128,7 @@ void display() {
 		}
 		if (term.z - term.w * SLOW != 0) {
 			float k = (rc[2 * i + 1].w * SLOW - rc[2 * i + 1].z) / (term.z - term.w * SLOW);
-			if (k >= 0) {
+			if (k > 0) {
 				trap[count] = rc[2 * i + 1] + k * term;
 				trap[count].z = 0;
 				trap[count] /= trap[count].w;
@@ -185,7 +184,7 @@ void display() {
 				++count;
 			}
 		}
-		if (term.z - term.w * SUPP != 0) {
+		if (term.z - term.w * SLOW != 0) {
 			float k = (rc3[2 * i + 1].w * SLOW - rc3[2 * i + 1].z) / (term.z - term.w * SLOW);
 			vec4 p = rc3[2 * i + 1] + k * term;
 			p /= p.w;
