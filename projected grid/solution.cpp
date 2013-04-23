@@ -10,7 +10,7 @@
 #include <glm/gtc/matrix_access.hpp>
 #include <glm\gtc\type_ptr.hpp>
 #include "Camera.h"
-#define PI M_PI
+#define PI 3.1415
 
 using namespace glm;
 
@@ -22,35 +22,23 @@ const float MAXH = 30.f;
 const float SUPP = 1.f;
 const float SLOW = -1.f;
 
-vec3 findIntersection(const vec3 &pos, vec3 dir) {
-	vec3 point;
-	if (dir.z == 0 || pos.z == 0) {
-		point = pos + dir * DIST;
-		point.z = 0;
-	} else {
-		float t = - pos.z / dir.z;
-		if (t < 0) {
-			dir.z = -dir.z;
-			t = -t;
-		}
-		point = pos + t * (pos - dir);
-	}
-	return point;
-}
-
-vec3 buildProjectorPos(const vec3 &camera_pos,const vec3 &point){
+vec3 buildProjectorPos2(const vec3 &camera_pos) {
 	float x = camera_pos.x;
 	float y = camera_pos.y;
-	if (abs(camera_pos.z) > MAXH) {
-		x *= MAXH / abs(camera_pos.z);
-		y *= MAXH / abs(camera_pos.z);
+	float z = camera_pos.z;
+	if ((z < SUPP) && (z > SLOW)) {
+		if (z < 0) {
+			z = SLOW;
+		} else {
+			z = SUPP;
+		}
 	}
-	float z = sqrt(3 * ((x - point.x) * (x - point.x) + (y - point.y) * (y - point.y)));
 	return vec3(x, y, z);
 }
 
 Camera c;
 float tex[4 * width * (height - 1)];
+//z
 vec4 cube[8] = {
 	vec4(1., 1., 1., 1.),
 	vec4(1., 1., -1., 1.),
@@ -59,6 +47,28 @@ vec4 cube[8] = {
 	vec4(-1., -1., 1., 1.),
 	vec4(-1., -1., -1., 1.),
 	vec4(-1., 1., 1., 1.),
+	vec4(-1., 1., -1., 1.)
+};
+//y
+vec4 cube2[8] = {
+	vec4(1., 1., 1., 1.),
+	vec4(1., -1., 1., 1.),
+	vec4(1., 1., -1., 1.),
+	vec4(1., -1., -1., 1.),
+	vec4(-1., 1., 1., 1.),
+	vec4(-1., -1., 1., 1.),
+	vec4(-1., 1., -1., 1.),
+	vec4(-1., -1., -1., 1.)
+};
+//x
+vec4 cube3[8] = {
+	vec4(1., 1., 1., 1.),
+	vec4(-1., 1., 1., 1.),
+	vec4(1., -1., 1., 1.),
+	vec4(-1., -1., 1., 1.),
+	vec4(1., -1., -1., 1.),
+	vec4(-1., -1., -1., 1.),
+	vec4(1., 1., -1., 1.),
 	vec4(-1., 1., -1., 1.)
 };
 GLuint buf_tex;
@@ -70,27 +80,34 @@ void display() {
 
 	mat4 m = c.mvp();
 
-	vec3 point = findIntersection(c.pos(), c.dir());
-	vec3 pj_pos = buildProjectorPos(c.pos(), point);
+	vec3 point  = c.pos() + normalize(c.dir()) * DIST;
+	point.z = 0;
+	vec3 cam_dir = c.dir();
+	vec3 pj_pos = buildProjectorPos2(c.pos());
 	
 	mat4 m_pview = lookAt(pj_pos, point, vec3(0, 0, 1));
-	//mat4 m_proj = inverse(m_pview * c.perm());
 	mat4 m_proj = inverse(c.perm() * m_pview);
 
 	vec4 rc[8];
+	vec4 rc2[8];
+	vec4 rc3[8];
 	mat4 im = inverse(m);
 	for (int i = 0; i < 8; ++i) {
 		rc[i] = im * cube[i];
+		rc2[i] = im * cube2[i];
+		rc3[i] = im * cube3[i];
 	}
-	vec4 trap[24];
+	vec4 trap[32];
 	int count = 0;
 	for (int i = 0; i < 4; ++i) {
+		//боковые грани
 		vec4 term = rc[2 * i] - rc[2 * i + 1];
 		if (term.z - term.w * SUPP != 0) {
 			float k = (rc[2 * i + 1].w * SUPP - rc[2 * i + 1].z) / (term.z - term.w * SUPP);
 			if (k > 0) {
 				trap[count] = rc[2 * i + 1] + k * term;
 				trap[count].z = 0;
+				trap[count] /= trap[count].w;
 				++count;
 			}
 		}
@@ -99,18 +116,69 @@ void display() {
 			if (k >= 0) {
 				trap[count] = rc[2 * i + 1] + k * term;
 				trap[count].z = 0;
+				trap[count] /= trap[count].w;
 				++count;
 			}
 		}
+		//точки
 		if ((rc[2 * i].z / rc[2 * i].w < SUPP) && (rc[2 * i].z / rc[2 * i].w > SLOW)) {
 			trap[count] = rc[2 * i];
 			trap[count].z = 0;
+			trap[count] /= trap[count].w;
 			++count;
 		}
 		if ((rc[2 * i + 1].z / rc[2 * i + 1].w < SUPP) && (rc[2 * i + 1].z / rc[2 * i + 1].w > SLOW)) {
 			trap[count] = rc[2 * i + 1];
 			trap[count].z = 0;
+			trap[count] /= trap[count].w;
 			++count;
+		}
+		//пересечения для ближней и дальней плоскостей
+		term = rc2[2 * i] - rc2[2 * i + 1];
+		if (term.z - term.w * SUPP != 0) {
+			float k = (rc2[2 * i + 1].w * SUPP - rc2[2 * i + 1].z) / (term.z - term.w * SUPP);
+			vec4 p = rc2[2 * i + 1] + k * term;
+			p /= p.w;
+			if ((rc2[2 * i].z / rc2[2 * i].w - p.z) * (rc2[2 * i + 1].z / rc2[2 * i + 1].w - p.z) <= 0) {
+				trap[count] = p;
+				trap[count].z = 0;
+				trap[count] /= trap[count].w;
+				++count;
+			}
+		}
+		if (term.z - term.w * SLOW != 0) {
+			float k = (rc2[2 * i + 1].w * SLOW - rc2[2 * i + 1].z) / (term.z - term.w * SLOW);
+			vec4 p = rc2[2 * i + 1] + k * term;
+			p /= p.w;
+			if ((rc2[2 * i].z / rc2[2 * i].w - p.z) * (rc2[2 * i + 1].z / rc2[2 * i + 1].w - p.z) <= 0) {
+				trap[count] = p;
+				trap[count].z = 0;
+				trap[count] /= trap[count].w;
+				++count;
+			}
+		}
+		term = rc3[2 * i] - rc3[2 * i + 1];
+		if (term.z - term.w * SUPP != 0) {
+			float k = (rc3[2 * i + 1].w * SUPP - rc3[2 * i + 1].z) / (term.z - term.w * SUPP);
+			vec4 p = rc3[2 * i + 1] + k * term;
+			p /= p.w;
+			if ((rc3[2 * i].z / rc3[2 * i].w - p.z) * (rc3[2 * i + 1].z / rc3[2 * i + 1].w - p.z) <= 0) {
+				trap[count] = p;
+				trap[count].z = 0;
+				trap[count] /= trap[count].w;
+				++count;
+			}
+		}
+		if (term.z - term.w * SUPP != 0) {
+			float k = (rc3[2 * i + 1].w * SLOW - rc3[2 * i + 1].z) / (term.z - term.w * SLOW);
+			vec4 p = rc3[2 * i + 1] + k * term;
+			p /= p.w;
+			if ((rc3[2 * i].z / rc3[2 * i].w - p.z) * (rc3[2 * i + 1].z / rc3[2 * i + 1].w - p.z) <= 0) {
+				trap[count] = p;
+				trap[count].z = 0;
+				trap[count] /= trap[count].w;
+				++count;
+			}
 		}
 	}	
 	
@@ -141,13 +209,23 @@ void display() {
 		}
 
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
-		mat4 m_proj2 = m_proj * m_range;
+		mat4 m_proj2 =  m_proj * m_range;
 
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glDrawArrays(GL_LINE_STRIP, 0, width * 2 * (height - 1));
 
+		for (int i = 0; i < 8; ++i) {
+			rc[i] = m_proj2 * cube[i];
+		}
+		for (int i = 0; i < 4; ++i) {
+			vec4 term = rc[2 * i] - rc[2 * i + 1];
+			float k = -rc[2 * i + 1].z / term.z;
+			trap[i] = rc[2 * i + 1] + k * term;
+		}
+
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m));
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_proj"), 1, false, value_ptr(m_proj2));
+		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
 	}
 	glFlush();
 	glutSwapBuffers();

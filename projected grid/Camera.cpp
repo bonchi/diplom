@@ -12,11 +12,11 @@ mat4 Camera::view() {
 }
  
 mat4 Camera::mvp() {
-	return perspective(fovy_, aspect_, .1f, 1000.f) * view();
+	return perspective(fovy_, aspect_, .1f, 100.f) * view();
 }
 
 mat4 Camera::perm() {
-	return perspective(fovy_, aspect_, .1f, 1000.f);	
+	return perspective(fovy_, aspect_, .1f, 100.f);	
 }
  
 vec3 Camera::dir() {
