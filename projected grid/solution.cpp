@@ -1,6 +1,7 @@
 ﻿#include <GL\glew.h>
 #include <vector>
 #include <gl\freeglut.h>
+#include <time.h>
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -10,13 +11,13 @@
 #include <glm/gtc/matrix_access.hpp>
 #include <glm\gtc\type_ptr.hpp>
 #include "Camera.h"
-#define PI 3.1415
+#define PI 3.1415f
 
 using namespace glm;
 
 GLuint prg; 
-const int width = 30;
-const int height = 30;
+const int width = 100;
+const int height = 100;
 const float DIST = 1.f;
 const float MAXH = 30.f;
 const float SUPP = 1.f;
@@ -37,7 +38,6 @@ vec3 buildProjectorPos2(const vec3 &camera_pos) {
 }
 
 Camera c;
-float tex[4 * width * (height - 1)];
 //z
 vec4 cube[8] = {
 	vec4(1., 1., 1., 1.),
@@ -72,6 +72,22 @@ vec4 cube3[8] = {
 	vec4(-1., 1., -1., 1.)
 };
 GLuint buf_tex;
+GLuint vao;
+GLuint buf_index;
+float ampl [8] = {0.2f, 0.13f, 0.07f, 0.1f, 0.01f, 0.6f, 0.04f, 0.06f};
+vec3 waveVector [8] = {
+	vec3(-1.0, 0, 0),
+	vec3(-1., -1., 0),
+	vec3(-1., 1., 0),
+	vec3(-2., 1., 0),
+	vec3(-3., -1., 0),
+	vec3(-1., 2., 0),
+	vec3(-1., -3., 0),
+	vec3(-1., -1., 0)
+};
+float waveLength [8] = {10.,5., 4., 2., 20., 7., 6., 3};
+float wavePhase [8] = {0,PI * 0.5, PI, PI * 1.5, PI * 0.25, PI * 0.75, PI / 3, 0};
+int n_waves = 8;
 
 void display() {
 	glClearColor(1, 1, 1, 1);
@@ -212,7 +228,10 @@ void display() {
 		mat4 m_proj2 =  m_proj * m_range;
 
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
-		glDrawArrays(GL_LINE_STRIP, 0, width * 2 * (height - 1));
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		for (int i = 0; i < height - 1; ++i) {
+			glDrawArrays(GL_TRIANGLE_STRIP, i * width * 2, width * 2);
+		}
 
 		for (int i = 0; i < 8; ++i) {
 			rc[i] = m_proj2 * cube[i];
@@ -221,29 +240,46 @@ void display() {
 			vec4 term = rc[2 * i] - rc[2 * i + 1];
 			float k = -rc[2 * i + 1].z / term.z;
 			trap[i] = rc[2 * i + 1] + k * term;
+			float term2 = 0;
 		}
 
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m));
-		glUniformMatrix4fv(glGetUniformLocation(prg, "m_proj"), 1, false, value_ptr(m_proj2));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
+		glUniform1fv(glGetUniformLocation(prg, "ampl"), 8, ampl);
+		glUniform1fv(glGetUniformLocation(prg, "waveLength"), 8, waveLength);
+		glUniform1fv(glGetUniformLocation(prg, "wavePhase"), 8, wavePhase);
+		glUniform1i(glGetUniformLocation(prg, "n_waves"), n_waves);
+		glUniform3fv(glGetUniformLocation(prg, "waveVector"), 8, value_ptr(waveVector[0]));
+		glUniform1f(glGetUniformLocation(prg, "time"), (float) clock() / CLOCKS_PER_SEC);
 	}
 	glFlush();
 	glutSwapBuffers();
 }
 
-void init() {
+float tex[4 * width * height];
 
+void init() {
 	for (int i = 0; i < height - 1; ++i) {
 		for (int j = 0; j < width; ++j) {
 			tex[4 * (i * width + j)] = ((float) i) / (height - 1);
 			tex[4 * (i * width + j) + 1] = ((float) j) / (width - 1);
 			tex[4 * (i * width + j) + 2] = ((float) (i + 1)) / (height - 1);
-			tex[4 * (i * width + j) + 3] = ((float) j) / (width - 1);	
+			tex[4 * (i * width + j) + 3] = ((float) j) / (width - 1);
+		}
+	}
+
+	for (int i = 0; i < 8; ++i) {
+		if (waveVector[i].y == 0) {
+			waveVector[i].x = 2 * PI / waveLength[i];
+		} else {
+			float term = waveVector[i].x / waveVector[i].y;
+			waveVector[i].y = 2 * PI / (sqrt(term * term + 1) * waveLength[i]);
+			waveVector[i].x =  term * waveVector[i].y;
 		}
 	}
 
 	glGenBuffers(1, &buf_tex);
-	glNamedBufferDataEXT(buf_tex, 4 * width * (height - 1) * sizeof(float), tex, GL_STATIC_DRAW);
+	glNamedBufferDataEXT(buf_tex, 2 * width * height * sizeof(float), tex, GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 	glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, NULL);
 	glEnableVertexAttribArray(1);	
@@ -336,6 +372,7 @@ int main(int argc, char ** argv)
 	glutMouseFunc(mouse);
 	glutMotionFunc(motionMouse);
 	glEnable(GL_DEPTH_TEST);
+	glutIdleFunc(display);
 	glewInit();
 	init();
 	glutMainLoop();
