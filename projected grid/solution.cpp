@@ -297,15 +297,22 @@ void init() {
 		throw 1;
 }
 
-
+bool flag = true;
 
 void motionMouse(int x, int y) {
-	c_sec.motionMouse(x, y);
-	glutPostRedisplay();
+	if (flag) {
+		c_sec.motionMouse(x, y);
+	} else {
+		c_main.motionMouse(x, y);
+	}
 }
 
 void mouse(int button, int state, int x, int y) {
-	c_sec.mouse(button, state, x, y);
+	if (flag) {
+		c_sec.mouse(button, state, x, y);
+	} else {
+		c_main.mouse(button, state, x, y);
+	}
 }
 
 void key(unsigned char k, int x, int y) {
@@ -313,11 +320,13 @@ void key(unsigned char k, int x, int y) {
 		exit(0);
 	} 
 	if (k == 9) {
-		Camera term = c_main;
-		c_main = c_sec;
-		c_sec = term;
+		flag = !flag;
 	}
-	c_sec.key(k);
+	if (flag) {
+		c_sec.key(k);
+	} else {
+		c_main.key(k);
+	}
 	display();
 }
 
