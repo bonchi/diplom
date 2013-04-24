@@ -10,7 +10,7 @@ using namespace glm;
 class Camera {
 	int mousex;
 	int mousey;
-	bool flag;
+	bool flag;	
 
 	vec3 pos_;
  

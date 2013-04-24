@@ -36,7 +36,8 @@ vec3 buildProjectorPos2(const vec3 &camera_pos) {
 	return vec3(x, y, z);
 }
 
-Camera c;
+Camera c_main;
+Camera c_sec;
 //z
 vec4 cube[8] = {
 	vec4(1., 1., 1., 1.),
@@ -97,7 +98,7 @@ void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
 		if ((b.z / b.w - p.z) * (a.z / a.w - p.z) <= 0) {
 			trap[count] = p;
 			trap[count].z = 0;
-			trap[count] /= trap[count].w;
+			trap[count] /= trap[count].w;		
 			++count;
 		}
 	}
@@ -108,15 +109,16 @@ void display() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(prg);
 
-	mat4 m = c.mvp();
+	mat4 m = c_main.mvp();
+	mat4 m2 = c_sec.mvp();
 
-	vec3 point  = c.pos() + normalize(c.dir()) * DIST;
+	vec3 point  = c_main.pos() + normalize(c_main.dir()) * DIST;
 	point.z = 0;
-	vec3 cam_dir = c.dir();
-	vec3 pj_pos = buildProjectorPos2(c.pos());
+	vec3 cam_dir = c_main.dir();
+	vec3 pj_pos = buildProjectorPos2(c_main.pos());
 	
 	mat4 m_pview = lookAt(pj_pos, point, vec3(0, 0, 1));
-	mat4 m_proj = inverse(c.perm() * m_pview);
+	mat4 m_proj = inverse(c_main.perm() * m_pview);
 
 	vec4 rc[8];
 	vec4 rc2[8];
@@ -198,7 +200,7 @@ void display() {
 			float term2 = 0;
 		}
 
-		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m));
+		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
 		glUniform1fv(glGetUniformLocation(prg, "ampl"), 8, ampl);
 		glUniform1fv(glGetUniformLocation(prg, "waveLength"), 8, waveLength);
@@ -298,19 +300,24 @@ void init() {
 
 
 void motionMouse(int x, int y) {
-	c.motionMouse(x, y);
+	c_sec.motionMouse(x, y);
 	glutPostRedisplay();
 }
 
 void mouse(int button, int state, int x, int y) {
-	c.mouse(button, state, x, y);
+	c_sec.mouse(button, state, x, y);
 }
 
 void key(unsigned char k, int x, int y) {
 	if (k == 'Q') {
 		exit(0);
 	} 
-	c.key(k);
+	if (k == 9) {
+		Camera term = c_main;
+		c_main = c_sec;
+		c_sec = term;
+	}
+	c_sec.key(k);
 	display();
 }
 

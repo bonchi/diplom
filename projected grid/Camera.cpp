@@ -64,6 +64,14 @@ void Camera::mouse(int button, int state, int x, int y) {
 			mousey = y;
 			flag = true;
 		}
+	} else if (button == 3) {
+		if (fovy_ < 179) {
+			fovy_ += 1.f;
+		}
+	} else if (button == 4) {
+		if (fovy_ > 1) {
+			fovy_ -= 1.f;
+		}
 	}
 }
 
