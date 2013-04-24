@@ -78,6 +78,9 @@ void Camera::motionMouse(int x, int y) {
 
 void Camera::key(unsigned char k) {
 	float term = 0.1f;
+	if (k == 'r') {
+		roll(term);
+	}
 	if (k == 'q') {
 		move(term);
 	}

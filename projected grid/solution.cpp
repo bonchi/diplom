@@ -73,7 +73,7 @@ vec4 cube3[8] = {
 GLuint buf_tex;
 GLuint vao;
 GLuint buf_index;
-float ampl [8] = {0.2f, 0.13f, 0.07f, 0.1f, 0.01f, 0.6f, 0.04f, 0.06f};
+float ampl [8] = {0.2f, 0.13f, 0.07f, 0.1f, 0.01f, 0.3f, 0.04f, 0.06f};
 vec3 waveVector [8] = {
 	vec3(-1.0, 0, 0),
 	vec3(-1., -1., 0),
@@ -87,6 +87,21 @@ vec3 waveVector [8] = {
 float waveLength [8] = {10.,5., 4., 2., 20., 7., 6., 3};
 float wavePhase [8] = {0,PI * 0.5, PI, PI * 1.5, PI * 0.25, PI * 0.75, PI / 3, 0};
 int n_waves = 8;
+
+void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
+	vec4 term = b - a;
+	if (term.z - term.w * h != 0) {
+		float k = (a.w * h - a.z) / (term.z - term.w * h);
+		vec4 p = a + k * term;
+		p /= p.w;
+		if ((b.z / b.w - p.z) * (a.z / a.w - p.z) <= 0) {
+			trap[count] = p;
+			trap[count].z = 0;
+			trap[count] /= trap[count].w;
+			++count;
+		}
+	}
+}
 
 void display() {
 	glClearColor(1, 1, 1, 1);
@@ -116,25 +131,8 @@ void display() {
 	int count = 0;
 	for (int i = 0; i < 4; ++i) {
 		//боковые грани
-		vec4 term = rc[2 * i] - rc[2 * i + 1];
-		if (term.z - term.w * SUPP != 0) {
-			float k = (rc[2 * i + 1].w * SUPP - rc[2 * i + 1].z) / (term.z - term.w * SUPP);
-			if (k > 0) {
-				trap[count] = rc[2 * i + 1] + k * term;
-				trap[count].z = 0;
-				trap[count] /= trap[count].w;
-				++count;
-			}
-		}
-		if (term.z - term.w * SLOW != 0) {
-			float k = (rc[2 * i + 1].w * SLOW - rc[2 * i + 1].z) / (term.z - term.w * SLOW);
-			if (k > 0) {
-				trap[count] = rc[2 * i + 1] + k * term;
-				trap[count].z = 0;
-				trap[count] /= trap[count].w;
-				++count;
-			}
-		}
+		intersection(rc[2 * i + 1], rc[2 * i], SUPP, trap, count);
+		intersection(rc[2 * i + 1], rc[2 * i], SLOW, trap, count);
 		//точки
 		if ((rc[2 * i].z / rc[2 * i].w < SUPP) && (rc[2 * i].z / rc[2 * i].w > SLOW)) {
 			trap[count] = rc[2 * i];
@@ -149,52 +147,10 @@ void display() {
 			++count;
 		}
 		//пересечения для ближней и дальней плоскостей
-		term = rc2[2 * i] - rc2[2 * i + 1];
-		if (term.z - term.w * SUPP != 0) {
-			float k = (rc2[2 * i + 1].w * SUPP - rc2[2 * i + 1].z) / (term.z - term.w * SUPP);
-			vec4 p = rc2[2 * i + 1] + k * term;
-			p /= p.w;
-			if ((rc2[2 * i].z / rc2[2 * i].w - p.z) * (rc2[2 * i + 1].z / rc2[2 * i + 1].w - p.z) <= 0) {
-				trap[count] = p;
-				trap[count].z = 0;
-				trap[count] /= trap[count].w;
-				++count;
-			}
-		}
-		if (term.z - term.w * SLOW != 0) {
-			float k = (rc2[2 * i + 1].w * SLOW - rc2[2 * i + 1].z) / (term.z - term.w * SLOW);
-			vec4 p = rc2[2 * i + 1] + k * term;
-			p /= p.w;
-			if ((rc2[2 * i].z / rc2[2 * i].w - p.z) * (rc2[2 * i + 1].z / rc2[2 * i + 1].w - p.z) <= 0) {
-				trap[count] = p;
-				trap[count].z = 0;
-				trap[count] /= trap[count].w;
-				++count;
-			}
-		}
-		term = rc3[2 * i] - rc3[2 * i + 1];
-		if (term.z - term.w * SUPP != 0) {
-			float k = (rc3[2 * i + 1].w * SUPP - rc3[2 * i + 1].z) / (term.z - term.w * SUPP);
-			vec4 p = rc3[2 * i + 1] + k * term;
-			p /= p.w;
-			if ((rc3[2 * i].z / rc3[2 * i].w - p.z) * (rc3[2 * i + 1].z / rc3[2 * i + 1].w - p.z) <= 0) {
-				trap[count] = p;
-				trap[count].z = 0;
-				trap[count] /= trap[count].w;
-				++count;
-			}
-		}
-		if (term.z - term.w * SLOW != 0) {
-			float k = (rc3[2 * i + 1].w * SLOW - rc3[2 * i + 1].z) / (term.z - term.w * SLOW);
-			vec4 p = rc3[2 * i + 1] + k * term;
-			p /= p.w;
-			if ((rc3[2 * i].z / rc3[2 * i].w - p.z) * (rc3[2 * i + 1].z / rc3[2 * i + 1].w - p.z) <= 0) {
-				trap[count] = p;
-				trap[count].z = 0;
-				trap[count] /= trap[count].w;
-				++count;
-			}
-		}
+		intersection(rc2[2 * i + 1], rc2[2 * i], SUPP, trap, count);
+		intersection(rc2[2 * i + 1], rc2[2 * i], SLOW, trap, count);
+		intersection(rc3[2 * i + 1], rc3[2 * i], SUPP, trap, count);
+		intersection(rc3[2 * i + 1], rc3[2 * i], SLOW, trap, count);
 	}	
 	
 	if (count > 0) {
