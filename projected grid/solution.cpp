@@ -105,12 +105,30 @@ void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
 }
 
 void display() {
+	glUseProgram(0);
 	glClearColor(1, 1, 1, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glUseProgram(prg);
-
 	mat4 m = c_main.mvp();
+	mat4 im = inverse(m);
 	mat4 m2 = c_sec.mvp();
+	vec4 rc[8];
+	vec4 rc2[8];
+	vec4 rc3[8];
+
+	for (int i = 0; i < 4; ++i) {
+		rc[2 * i] = im * cube[2 * i];
+		rc[2 * i] = m2 * rc[2 * i];
+	}
+	glColor3f(1.0f, 0, 0);
+	glLineWidth(2.0);
+	vec4 camera_vert = m2 * vec4(c_main.pos(), 1.0);
+	for (int i = 0; i < 4; ++i) {
+		glBegin(GL_LINES);
+			glVertex4f(camera_vert.x, camera_vert.y, camera_vert.z, camera_vert.w);
+			glVertex4f(rc[2 * i].x, rc[2 * i].y, rc[2 * i].z, rc[2 * i].w);
+		glEnd();			
+	}
+	glLineWidth(1.0);
 
 	vec3 point  = c_main.pos() + normalize(c_main.dir()) * DIST;
 	point.z = 0;
@@ -120,10 +138,6 @@ void display() {
 	mat4 m_pview = lookAt(pj_pos, point, vec3(0, 0, 1));
 	mat4 m_proj = inverse(c_main.perm() * m_pview);
 
-	vec4 rc[8];
-	vec4 rc2[8];
-	vec4 rc3[8];
-	mat4 im = inverse(m);
 	for (int i = 0; i < 8; ++i) {
 		rc[i] = im * cube[i];
 		rc2[i] = im * cube2[i];
@@ -183,6 +197,8 @@ void display() {
 
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
 		mat4 m_proj2 =  m_proj * m_range;
+
+		glUseProgram(prg);
 
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
