@@ -210,8 +210,7 @@ void display() {
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glPointSize(5.f);
-		glDrawElements(GL_TRIANGLE_STRIP, index.size(), GL_UNSIGNED_INT, NULL);
+		glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
 			rc[i] = m_proj2 * cube[i];
@@ -240,17 +239,21 @@ void display() {
 
 void generationgrid(int x0, int x1, int y0, int y1, int wid, int cache_size, std::vector <int> &ind) {
 	if (x1 - x0 + 1 <= cache_size - 1) {
-		ind.push_back(y0 * wid + x0);
 		for (int x = x0; x <= x1; ++x) {
+			ind.push_back(y0 * wid + x);
+			ind.push_back(y0 * wid + x);
 			ind.push_back(y0 * wid + x);
 		}
 		for (int y = y0; y < y1; ++y) {
-			ind.push_back(y * wid + x0);
-			for (int x = x0; x <= x1; ++x) {
+			for (int x = x0; x < x1; ++x) {
 				ind.push_back(y * wid + x);
 				ind.push_back((y + 1) * wid + x);
+				ind.push_back(y * wid + x + 1);
+
+				ind.push_back((y + 1) * wid + x);
+				ind.push_back(y * wid + x + 1);
+				ind.push_back((y + 1) * wid + x + 1);
 			}
-			ind.push_back((y + 1) * wid + x1);
 		}
 	} else {
 		int x_new = x0 + cache_size - 2;
@@ -434,7 +437,7 @@ void initTW () {
 	quat rotation;
 	TwGLUTModifiersFunc  (glutGetModifiers);
 	TwBar *bar = TwNewBar("Parameters");
-	TwDefine(" Parameters size='500 600' color='170 30 20' alpha=255 valueswidth=220 text=dark position='20 70' ");
+	TwDefine(" Parameters size='350 600' color='170 30 20' alpha=255 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
 				" min=1 max=255 step=10");
 	TwStructMember pointMembers[] = { 
