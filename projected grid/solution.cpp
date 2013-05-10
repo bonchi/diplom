@@ -11,13 +11,14 @@
 #include <glm/gtc/matrix_access.hpp>
 #include <glm\gtc\type_ptr.hpp>
 #include "Camera.h"
+#include <GL\AntTweakBar.h>
 #define PI 3.1415f
 
 using namespace glm;
 
 GLuint prg; 
-const int width = 100;
-const int height = 100;
+const int max_resolution = 255;
+int resolution = 100;
 const float DIST = 1.f;
 const float MAXH = 30.f;
 const float SUPP = 1.f;
@@ -102,6 +103,13 @@ void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
 			++count;
 		}
 	}
+}
+
+float* pos = new float [2 * (max_resolution + 1) * (max_resolution + 1)];
+std::vector <int> index;
+
+void idle() {
+	glutPostRedisplay();
 }
 
 void display() {
@@ -199,12 +207,11 @@ void display() {
 		mat4 m_proj2 =  m_proj * m_range;
 
 		glUseProgram(prg);
-
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		for (int i = 0; i < height - 1; ++i) {
-			glDrawArrays(GL_TRIANGLE_STRIP, i * width * 2, width * 2);
-		}
+		glPointSize(5.f);
+		glDrawElements(GL_TRIANGLE_STRIP, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
 			rc[i] = m_proj2 * cube[i];
@@ -225,22 +232,52 @@ void display() {
 		glUniform3fv(glGetUniformLocation(prg, "waveVector"), 8, value_ptr(waveVector[0]));
 		glUniform1f(glGetUniformLocation(prg, "time"), (float) clock() / CLOCKS_PER_SEC);
 	}
+	assert(glGetError() == GL_NO_ERROR);
+	TwDraw();
 	glFlush();
 	glutSwapBuffers();
 }
 
-float tex[4 * width * height];
+void generationgrid(int x0, int x1, int y0, int y1, int wid, int cache_size, std::vector <int> &ind) {
+	if (x1 - x0 + 1 <= cache_size - 1) {
+		ind.push_back(y0 * wid + x0);
+		for (int x = x0; x <= x1; ++x) {
+			ind.push_back(y0 * wid + x);
+		}
+		for (int y = y0; y < y1; ++y) {
+			ind.push_back(y * wid + x0);
+			for (int x = x0; x <= x1; ++x) {
+				ind.push_back(y * wid + x);
+				ind.push_back((y + 1) * wid + x);
+			}
+			ind.push_back((y + 1) * wid + x1);
+		}
+	} else {
+		int x_new = x0 + cache_size - 2;
+		generationgrid(x0, x_new, y0, y1, wid, cache_size, ind);
+		generationgrid(x_new, x1, y0, y1, wid, cache_size, ind);
+	}
+}
 
-void init() {
-	for (int i = 0; i < height - 1; ++i) {
-		for (int j = 0; j < width; ++j) {
-			tex[4 * (i * width + j)] = ((float) i) / (height - 1);
-			tex[4 * (i * width + j) + 1] = ((float) j) / (width - 1);
-			tex[4 * (i * width + j) + 2] = ((float) (i + 1)) / (height - 1);
-			tex[4 * (i * width + j) + 3] = ((float) j) / (width - 1);
+void rebuildGrid() {
+	for (int i = 0; i <= resolution; ++i) {
+		for (int j = 0; j <= resolution; ++j) {
+			pos[2 * (i * (resolution + 1) + j)] = ((float) i) / resolution;
+			pos[2 * (i * (resolution + 1) + j) + 1] = ((float) j) / resolution;
 		}
 	}
+	index.resize(0);
+	generationgrid(0, resolution, 0, resolution, resolution + 1, 8, index);
+	glNamedBufferDataEXT(buf_tex, 2 * (resolution + 1) * (resolution + 1) * sizeof(float), pos, GL_STATIC_DRAW);
+	int t = index.size();
+	int* ind = new int[t];
+	for (int i = 0; i < t; ++i) {
+		ind[i] = index[i];
+	}
+	glNamedBufferDataEXT(buf_index, t * sizeof(int), ind, GL_STATIC_DRAW);
+}
 
+void init() {
 	for (int i = 0; i < 8; ++i) {
 		if (waveVector[i].y == 0) {
 			waveVector[i].x = 2 * PI / waveLength[i];
@@ -250,14 +287,14 @@ void init() {
 			waveVector[i].x =  term * waveVector[i].y;
 		}
 	}
-
 	glGenBuffers(1, &buf_tex);
-	glNamedBufferDataEXT(buf_tex, 2 * width * height * sizeof(float), tex, GL_STATIC_DRAW);
+	glGenBuffers(1, &buf_index);
+	rebuildGrid();
 	glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 	glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, NULL);
 	glEnableVertexAttribArray(1);	
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
+	
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
 	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
 	int size;
@@ -313,9 +350,15 @@ void init() {
 		throw 1;
 }
 
+void reshape(int width, int height) {
+   TwWindowSize(width, height);
+}
+
 bool flag = true;
 
 void motionMouse(int x, int y) {
+	if (TwEventMouseMotionGLUT(x, y)) return;
+
 	if (flag) {
 		c_sec.motionMouse(x, y);
 	} else {
@@ -324,6 +367,8 @@ void motionMouse(int x, int y) {
 }
 
 void mouse(int button, int state, int x, int y) {
+	if (TwEventMouseButtonGLUT(button, state, x, y)) return;
+
 	if (flag) {
 		c_sec.mouse(button, state, x, y);
 	} else {
@@ -332,6 +377,11 @@ void mouse(int button, int state, int x, int y) {
 }
 
 void key(unsigned char k, int x, int y) {
+	if (TwEventKeyboardGLUT(k, x, y)) {
+		rebuildGrid();
+		return;
+	}
+
 	if (k == 'Q') {
 		exit(0);
 	} 
@@ -346,22 +396,91 @@ void key(unsigned char k, int x, int y) {
 	display();
 }
 
+struct Point { 
+	float X, Y, Z; 
+	Point(vec3 a) {
+		X = a.x;
+		Y = a.y;
+		Z = a.z;
+	}
+};
+
+void TW_CALL camera_get_pos (void *value, void *clientData) {
+	*static_cast<Point *>(value) = (static_cast<Camera *>(clientData)) ->pos();
+}
+
+void TW_CALL camera_get_fov (void *value, void *clientData) {
+	*static_cast<float *>(value) = (static_cast<Camera *>(clientData)) -> getFovy();
+}
+
+void TW_CALL camera_get_rotation (void *value, void *clientData) {
+	*static_cast<quat *>(value) = (static_cast<Camera *>(clientData)) -> getCameraRotation();
+}
+
+void TW_CALL camera_get_roll (void *value, void *clientData) {
+	*static_cast<float *>(value) = (static_cast<Camera *>(clientData)) -> getRoll();
+}
+
+void TW_CALL camera_get_pitch (void *value, void *clientData) {
+	*static_cast<float *>(value) = (static_cast<Camera *>(clientData)) -> getPitch();
+}
+
+void TW_CALL camera_get_heading (void *value, void *clientData) {
+	*static_cast<float *>(value) = (static_cast<Camera *>(clientData)) -> getHeading();
+}
+
+void initTW () {
+	int term = resolution;
+	quat rotation;
+	TwGLUTModifiersFunc  (glutGetModifiers);
+	TwBar *bar = TwNewBar("Parameters");
+	TwDefine(" Parameters size='500 600' color='170 30 20' alpha=255 valueswidth=220 text=dark position='20 70' ");
+	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
+				" min=1 max=255 step=10");
+	TwStructMember pointMembers[] = { 
+        { "X", TW_TYPE_FLOAT, offsetof(Point, X), NULL},
+        { "Y", TW_TYPE_FLOAT, offsetof(Point, Y), NULL },
+		{ "Z", TW_TYPE_FLOAT, offsetof(Point, Z), NULL}};
+	TwType pointType = TwDefineStruct("POINT", pointMembers, 3, sizeof(Point), NULL, NULL);
+
+	TwAddVarCB(bar, "Pos1", pointType, NULL, camera_get_pos, &c_main, 
+				"group='MainCamera' Label='Position'");
+	TwAddVarCB(bar, "ObjectOrientation1", TW_TYPE_QUAT4F, NULL, camera_get_rotation, &c_main, 
+                   " group='MainCamera' Label='ObjectOrienation' opened=true ");
+	TwAddVarCB(bar, "Pitch1", TW_TYPE_FLOAT, NULL, camera_get_pitch, &c_main, "group='MainCamera' Label='Pitch'");
+	TwAddVarCB(bar, "Heading1", TW_TYPE_FLOAT, NULL, camera_get_heading, &c_main, "group='MainCamera' Label='Heading'");
+	TwAddVarCB(bar, "Roll1", TW_TYPE_FLOAT, NULL, camera_get_roll, &c_main, "group='MainCamera' Label='Roll'");
+	TwAddVarCB(bar, "Fov1", TW_TYPE_FLOAT, NULL, camera_get_fov, &c_main, "group='MainCamera' Label='Fov'");
+
+	TwAddVarCB(bar, "Position2", pointType, NULL, camera_get_pos, &c_sec, 
+				" group='SecondCamera' Label='Position' ");
+	TwAddVarCB(bar, "ObjectOrientation2", TW_TYPE_QUAT4F, NULL, camera_get_rotation, &c_sec, 
+                   " group='SecondCamera' Label='ObjectOrienation' opened=true ");
+	TwAddVarCB(bar, "Pitch2", TW_TYPE_FLOAT, NULL, camera_get_pitch, &c_sec, "group='SecondCamera' Label='Pitch'");
+	TwAddVarCB(bar, "Heading2", TW_TYPE_FLOAT, NULL, camera_get_heading, &c_sec, "group='SecondCamera' Label='Heading'");
+	TwAddVarCB(bar, "Roll2", TW_TYPE_FLOAT, NULL, camera_get_roll, &c_sec, "group='SecondCamera' Label='Roll'");
+	TwAddVarCB(bar, "Fov2", TW_TYPE_FLOAT, NULL, camera_get_fov, &c_sec, "group='SecondCamera' Label='Fov'");
+}
+
 int main(int argc, char ** argv)
 {
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_ACCUM | GLUT_RGBA | GLUT_DEPTH);
-	glutInitWindowSize(500, 500);
-
+	glutInitWindowSize (1000, 1000);
 	glutCreateWindow( "window" );
-
+	
+	TwWindowSize(800, 800);
 	glutDisplayFunc(display);
+	glutReshapeFunc(reshape);
 	glutKeyboardFunc(key);
 	glutMouseFunc(mouse);
 	glutMotionFunc(motionMouse);
 	glEnable(GL_DEPTH_TEST);
-	glutIdleFunc(display);
+	glutIdleFunc(idle);
 	glewInit();
+	TwInit(TW_OPENGL, NULL);
 	init();
+	initTW();
 	glutMainLoop();
 
 	return 0;

@@ -11,6 +11,20 @@ mat4 Camera::view() {
 		lookAt(pos_, pos_ + vec3(1, 0, 0), vec3(0, 0, 1));
 }
  
+float Camera::getPitch() {
+	return pitch_;
+}
+float Camera::getFovy() {
+	return fovy_;
+}
+
+float Camera::getRoll() {
+	return roll_;
+}
+float Camera::getHeading() {
+	return heading_;
+}
+
 mat4 Camera::mvp() {
 	return perspective(fovy_, aspect_, .1f, 100.f) * view();
 }
@@ -87,7 +101,7 @@ void Camera::motionMouse(int x, int y) {
 void Camera::key(unsigned char k) {
 	float term = 0.1f;
 	if (k == 'r') {
-		roll(term);
+		roll(10 * term);
 	}
 	if (k == 'q') {
 		move(term);
@@ -110,4 +124,26 @@ void Camera::key(unsigned char k) {
 	 if (k == 's') {
 		move_vert(-term);
 	 }
+}
+
+void Camera::quaternion_from_axisangle (quat &q, vec3 v, float a) {
+	float sin_a = sin(a * 0.5 * PI / 180);
+	float cos_a = cos(a * 0.5 * PI / 180);
+	q.x = v.x * sin_a;
+	q.y = v.y * sin_a;
+	q.z = v.z * sin_a;
+	q.w = cos_a;
+	q = normalize(q);
+}
+
+quat Camera::getCameraRotation() {
+	vec3 vx = vec3(1.f, 0, 0);
+	vec3 vy = vec3(0, 1.f, 0);
+	vec3 vz = vec3(0, 0, 1.f);
+	quat q, qx, qy, qz, qterm;
+	quaternion_from_axisangle(qx, vx, pitch_ );
+	quaternion_from_axisangle(qy, vy, heading_ );
+	quaternion_from_axisangle(qz, vz, roll_ );
+	q = qx * qy * qz;
+	return q;
 }
