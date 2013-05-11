@@ -1,5 +1,7 @@
 #pragma once
 #include <gl\freeglut.h>
+#include <string>
+#include <sstream>
 #include <glm\glm.hpp>
 #include <glm\gtc\matrix_transform.hpp> 
 #include <glm/gtc/matrix_access.hpp>
@@ -20,11 +22,11 @@ class Camera {
  
     float fovy_;
     float aspect_;
-    float speed_;
 
 	mat4 view();
 public:
 	Camera(void);
+	Camera(std::string const &);
 	mat4 mvp();
 	mat4 perm();
 	vec3 pos();
@@ -47,5 +49,6 @@ public:
 	void quaternion_from_axisangle (quat &, vec3, float);
 	quat getCameraRotation();
 	void quaternion_multiply(quat&, quat, quat);
+	std::string printMe();
 };
 

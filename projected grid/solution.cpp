@@ -503,6 +503,39 @@ void TW_CALL set_value (const void *value, void *clientData) {
 	generationH0();
 }
 
+std::string nameSaved = "";
+std::string path = "C:\\Users\\Asus\\Documents\\Cameras\\";
+
+void printCamera(Camera &c, std::ofstream & out) {
+	
+}
+
+void TW_CALL savecamera(void *clientData) { 
+    if (nameSaved == "") return;
+
+	std::ofstream out(path + nameSaved);
+	out << c_main.printMe() << "\n" << c_sec.printMe() << "\n";
+	out << resolution << " " << lx << " " << lz << " " << waves_resolution << " " << A_norm << " " << wind.x << " " << wind.y << "\n";
+}
+
+void TW_CALL loadcamera(void *clientData) { 
+    if (nameSaved == "") return;
+
+	std::ifstream in(path + nameSaved);
+	std::string mains, secs;
+	std::getline(in, mains);
+	std::getline(in, secs);
+	c_main = Camera(mains);
+	c_sec = Camera(secs);
+	in >> resolution >> lx >> lz >> waves_resolution >> A_norm >> wind.x >> wind.y;
+	rebuildGrid();
+	generationH0();
+}
+
+void TW_CALL CopyStdStringToClient(std::string& destinationClientString, const std::string& sourceLibraryString) {
+  destinationClientString = sourceLibraryString;
+}
+
 void initTW () {
 	int term = resolution;
 	quat rotation;
@@ -544,6 +577,10 @@ void initTW () {
 	TwAddVarCB(bar, "Heading2", TW_TYPE_FLOAT, NULL, camera_get_heading, &c_sec, "group='SecondCamera' Label='Heading'");
 	TwAddVarCB(bar, "Roll2", TW_TYPE_FLOAT, NULL, camera_get_roll, &c_sec, "group='SecondCamera' Label='Roll'");
 	TwAddVarCB(bar, "Fov2", TW_TYPE_FLOAT, NULL, camera_get_fov, &c_sec, "group='SecondCamera' Label='Fov'");
+	TwCopyStdStringToClientFunc(CopyStdStringToClient);
+	TwAddVarRW(bar, "Choose file name", TW_TYPE_STDSTRING, &nameSaved, NULL);
+	TwAddButton(bar, "Save", savecamera, NULL, NULL);
+	TwAddButton(bar, "Load", loadcamera, NULL, NULL);
 }
 
 int main(int argc, char ** argv)

@@ -1,6 +1,6 @@
 #include "Camera.h"
 
-Camera::Camera() : pos_(-5, 0, 0), heading_(), pitch_(), speed_(0.1f)
+Camera::Camera() : pos_(-5, 0, 0), heading_(), pitch_()
 	, roll_(), fovy_(120.f), aspect_(1.f), flag(false)
 {}
 
@@ -146,4 +146,16 @@ quat Camera::getCameraRotation() {
 	quaternion_from_axisangle(qz, vz, roll_ );
 	q = qx * qy * qz;
 	return q;
+}
+
+std::string Camera::printMe() {
+	std::stringstream os;
+	os << mousex  << " " << mousey << " " << flag << " " << pos_.x << " " << pos_.y << " " << pos_.z << " " << heading_ << " "
+		<< pitch_ << " " << roll_ << " " << fovy_ << " " << aspect_;
+	return os.str();
+}
+
+Camera::Camera(std::string  const & s) {
+	std::stringstream in(s);
+	in >> mousex  >> mousey >> flag >> pos_.x >> pos_.y >> pos_.z >> heading_ >> pitch_ >> roll_ >> fovy_ >> aspect_;
 }
