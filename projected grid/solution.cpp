@@ -333,6 +333,7 @@ void init() {
 
 void reshape(int width, int height) {
    TwWindowSize(width, height);
+   glViewport(0, 0, width, height);
 }
 
 bool flag = true;
@@ -451,7 +452,7 @@ void initTW () {
 	quat rotation;
 	TwGLUTModifiersFunc  (glutGetModifiers);
 	TwBar *bar = TwNewBar("Parameters");
-	TwDefine(" Parameters size='350 600' color='170 30 20' alpha=255 valueswidth=220 text=dark position='20 70' ");
+	TwDefine(" Parameters size='400 600' color='170 30 20' alpha=200 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
 				" min=1 max=255 step=10");
 	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
