@@ -6,13 +6,17 @@
 #include <string>
 #include <fstream>
 #include <math.h>
+#include <ctime>
+#include <complex>
 #include <glm\glm.hpp>
 #include <glm\gtc\matrix_transform.hpp> 
 #include <glm/gtc/matrix_access.hpp>
 #include <glm\gtc\type_ptr.hpp>
 #include "Camera.h"
 #include <GL\AntTweakBar.h>
+#include <cmath>
 #define PI 3.1415f
+#define MAX_WAVES_RESOLUTION 17
 
 using namespace glm;
 
@@ -73,22 +77,80 @@ vec4 cube3[8] = {
 	vec4(-1., 1., -1., 1.)
 };
 GLuint buf_tex;
-GLuint vao;
 GLuint buf_index;
-float ampl [8] = {0.2f, 0.13f, 0.07f, 0.1f, 0.01f, 0.3f, 0.04f, 0.06f};
-vec3 waveVector [8] = {
-	vec3(-1.0, 0, 0),
-	vec3(-1., -1., 0),
-	vec3(-1., 1., 0),
-	vec3(-2., 1., 0),
-	vec3(-3., -1., 0),
-	vec3(-1., 2., 0),
-	vec3(-1., -3., 0),
-	vec3(-1., -1., 0)
-};
-float waveLength [8] = {10.,5., 4., 2., 20., 7., 6., 3};
-float wavePhase [8] = {0,PI * 0.5, PI, PI * 1.5, PI * 0.25, PI * 0.75, PI / 3, 0};
-int n_waves = 8;
+
+float lx = 30.f;
+float lz = 30.f;
+int waves_resolution = 16;
+float A_norm = 0.01f;
+vec2 wind = vec2(2.f, 3.f);
+float g = 9.81f;
+vec2 h_koff [MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION];
+std::complex<float> h0 [MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION];
+
+float vecLen(vec2 a) {
+	float t = sqrt(a.x * a.x + a.y * a.y);
+	return t;
+}
+
+float phillipsSpectrum (vec2 k) {
+	float t = vecLen(wind);
+	if (t == 0) {
+		return 0;
+	}
+	float l = t * t / g;
+	float kl = vecLen(k);
+	float term = dot(normalize(k),normalize(wind));
+	float t1 = exp(-1 / (kl * kl * l * l));
+	return A_norm * t1 * term * term / (kl * kl * kl * kl);
+}
+
+std::complex<float> get_h0(vec2 k) {
+	double ret = (double)rand() / ((double)rand() + 0.1);
+	float e1 = (float)ret - floor(ret);
+	ret = (double)rand() / ((double)rand() + 0.1);
+	float e2 = (float)ret - floor(ret);
+	float norm1 = cos(2 * PI * e1) * sqrt(- 2 * log(e2));
+	float norm2 = sin(2 * PI * e1) * sqrt(- 2 * log(e2));
+	std::complex<float> c(norm1, norm2);
+	float term =  (float)sqrt( phillipsSpectrum(k) * 0.5);
+	return c * term;
+}
+
+void generationH0() {
+	int t2 = waves_resolution / 2;
+	for (int i = - t2; i <= t2 ; ++i) {
+		for (int j = - t2; j <= t2; ++j) {
+			if ((i == 0) && (j == 0)) {
+				continue;
+			}
+			vec2 k = vec2(2 * PI * i / lx,2 * PI * j / lz);
+			h0[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)] = get_h0(k);			
+		}	
+	}
+}
+
+std::complex<float> get_h(int i, int j, float t) {
+	std::complex<float> h_0 = h0[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)];
+	std::complex<float> h_1 = h0[(waves_resolution + 1) * (-i + waves_resolution / 2) + (-j + waves_resolution / 2)];
+	vec2 k = vec2(2 * PI * i / lx,2 * PI * j / lz);
+	std::complex<float> p (0, sqrt(g * vecLen(k)) * t);
+	return h_0 * exp(p) + std::complex<float>(real(h_1), -imag(h_1)) * exp(-p);
+}
+
+void generationHeight(float t) {	
+	int t2 = waves_resolution / 2;
+	for (int i = - t2; i < t2 ; ++i) {
+		for (int j = - t2; j < t2; ++j) {
+			if ((i == 0) && (j == 0)) {
+				continue;
+			}
+			std::complex<float> term =  get_h(i , j, t);
+			h_koff[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)].x = term.real();
+			h_koff[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)].y = term.imag();
+		}	
+	}
+}
 
 void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
 	vec4 term = b - a;
@@ -206,10 +268,12 @@ void display() {
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
 		mat4 m_proj2 =  m_proj * m_range;
 
+		generationHeight((float) clock() / CLOCKS_PER_SEC);
+
 		glUseProgram(prg);
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
 		glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
@@ -224,12 +288,16 @@ void display() {
 
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
-		glUniform1fv(glGetUniformLocation(prg, "ampl"), 8, ampl);
+		glUniform1i(glGetUniformLocation(prg, "waves_resolution"), waves_resolution);
+		glUniform1f(glGetUniformLocation(prg, "lx"), lx);
+		glUniform1f(glGetUniformLocation(prg, "lz"), lz);
+		glUniform2fv(glGetUniformLocation(prg, "h_koff"), MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION, value_ptr(h_koff[0])); 
+		/*glUniform1fv(glGetUniformLocation(prg, "ampl"), 8, ampl);
 		glUniform1fv(glGetUniformLocation(prg, "waveLength"), 8, waveLength);
 		glUniform1fv(glGetUniformLocation(prg, "wavePhase"), 8, wavePhase);
 		glUniform1i(glGetUniformLocation(prg, "n_waves"), n_waves);
-		glUniform3fv(glGetUniformLocation(prg, "waveVector"), 8, value_ptr(waveVector[0]));
-		glUniform1f(glGetUniformLocation(prg, "time"), (float) clock() / CLOCKS_PER_SEC);
+		glUniform3fv(glGetUniformLocation(prg, "waveVector"), 8, value_ptr(waveVector[0]));*/
+		//glUniform1f(glGetUniformLocation(prg, "time"), (float) clock() / CLOCKS_PER_SEC);
 	}
 	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
@@ -281,15 +349,8 @@ void rebuildGrid() {
 }
 
 void init() {
-	for (int i = 0; i < 8; ++i) {
-		if (waveVector[i].y == 0) {
-			waveVector[i].x = 2 * PI / waveLength[i];
-		} else {
-			float term = waveVector[i].x / waveVector[i].y;
-			waveVector[i].y = 2 * PI / (sqrt(term * term + 1) * waveLength[i]);
-			waveVector[i].x =  term * waveVector[i].y;
-		}
-	}
+	srand(time(0));
+	generationH0();
 	glGenBuffers(1, &buf_tex);
 	glGenBuffers(1, &buf_index);
 	rebuildGrid();
@@ -349,6 +410,7 @@ void init() {
 		std::cerr << buff << std::endl;
 		delete [] buff;
 	}
+	
 	if (!param)
 		throw 1;
 }
@@ -432,6 +494,15 @@ void TW_CALL camera_get_heading (void *value, void *clientData) {
 	*static_cast<float *>(value) = (static_cast<Camera *>(clientData)) -> getHeading();
 }
 
+void TW_CALL get_value (void *value, void *clientData) {
+	*static_cast<float *>(value) = *static_cast<float *>(clientData);
+}
+
+void TW_CALL set_value (const void *value, void *clientData) {
+	*static_cast<float *>(clientData) = *(const float*)value;
+	generationH0();
+}
+
 void initTW () {
 	int term = resolution;
 	quat rotation;
@@ -440,6 +511,16 @@ void initTW () {
 	TwDefine(" Parameters size='350 600' color='170 30 20' alpha=255 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
 				" min=1 max=255 step=10");
+	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
+				NULL);
+	TwAddVarCB(bar, "LZ", TW_TYPE_FLOAT, set_value, get_value, &lz,
+				NULL);
+	TwAddVarCB(bar, "A_norm", TW_TYPE_FLOAT, set_value, get_value, &A_norm,
+				NULL);
+	TwAddVarCB(bar, "Wind_X", TW_TYPE_FLOAT, set_value, get_value, &wind.x,
+				NULL);
+	TwAddVarCB(bar, "Wind_Y", TW_TYPE_FLOAT, set_value, get_value, &wind.y,
+				NULL);
 	TwStructMember pointMembers[] = { 
         { "X", TW_TYPE_FLOAT, offsetof(Point, X), NULL},
         { "Y", TW_TYPE_FLOAT, offsetof(Point, Y), NULL },
@@ -467,6 +548,7 @@ void initTW () {
 
 int main(int argc, char ** argv)
 {
+	
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_ACCUM | GLUT_RGBA | GLUT_DEPTH);
 	glutInitWindowSize (1000, 1000);
