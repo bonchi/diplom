@@ -1,7 +1,7 @@
 #version 330
 
 #define MAX_WAVES_RESOLUTION 17
-#define PI 3.1415f
+#define PI 3.141592653589793238f
 
 layout (location = 1) in vec3 texPos;
 

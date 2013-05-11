@@ -7,7 +7,7 @@
 #include <glm/gtc/matrix_access.hpp>
 #include <glm\gtc\type_ptr.hpp>
 using namespace glm;
-#define PI 3.1415f
+#define PI 3.141592653589793238f
 
 class Camera {
 	int mousex;

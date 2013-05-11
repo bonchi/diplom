@@ -1,92 +1,4 @@
-﻿#include <GL\glew.h>
-#include <vector>
-#include <gl\freeglut.h>
-#include <time.h>
-#include <iostream>
-#include <string>
-#include <fstream>
-#include <math.h>
-#include <ctime>
-#include <complex>
-#include <glm\glm.hpp>
-#include <glm\gtc\matrix_transform.hpp> 
-#include <glm/gtc/matrix_access.hpp>
-#include <glm\gtc\type_ptr.hpp>
-#include "Camera.h"
-#include <GL\AntTweakBar.h>
-#include <cmath>
-#define PI 3.1415f
-#define MAX_WAVES_RESOLUTION 17
-
-using namespace glm;
-
-GLuint prg; 
-const int max_resolution = 255;
-int resolution = 100;
-const float DIST = 1.f;
-const float MAXH = 30.f;
-const float SUPP = 1.f;
-const float SLOW = -1.f;
-
-vec3 buildProjectorPos2(const vec3 &camera_pos) {
-	float x = camera_pos.x;
-	float y = camera_pos.y;
-	float z = camera_pos.z;
-	if (z < 0) {
-		z = -z;
-	}
-	if (z < SUPP) {
-		z = SUPP;
-	}
-	return vec3(x, y, z);
-}
-
-Camera c_main;
-Camera c_sec;
-//z
-vec4 cube[8] = {
-	vec4(1., 1., 1., 1.),
-	vec4(1., 1., -1., 1.),
-	vec4(1., -1., 1., 1.),
-	vec4(1., -1., -1., 1.),
-	vec4(-1., -1., 1., 1.),
-	vec4(-1., -1., -1., 1.),
-	vec4(-1., 1., 1., 1.),
-	vec4(-1., 1., -1., 1.)
-};
-//y
-vec4 cube2[8] = {
-	vec4(1., 1., 1., 1.),
-	vec4(1., -1., 1., 1.),
-	vec4(1., 1., -1., 1.),
-	vec4(1., -1., -1., 1.),
-	vec4(-1., 1., 1., 1.),
-	vec4(-1., -1., 1., 1.),
-	vec4(-1., 1., -1., 1.),
-	vec4(-1., -1., -1., 1.)
-};
-//x
-vec4 cube3[8] = {
-	vec4(1., 1., 1., 1.),
-	vec4(-1., 1., 1., 1.),
-	vec4(1., -1., 1., 1.),
-	vec4(-1., -1., 1., 1.),
-	vec4(1., -1., -1., 1.),
-	vec4(-1., -1., -1., 1.),
-	vec4(1., 1., -1., 1.),
-	vec4(-1., 1., -1., 1.)
-};
-GLuint buf_tex;
-GLuint buf_index;
-
-float lx = 30.f;
-float lz = 30.f;
-int waves_resolution = 16;
-float A_norm = 0.01f;
-vec2 wind = vec2(2.f, 3.f);
-float g = 9.81f;
-vec2 h_koff [MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION];
-std::complex<float> h0 [MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION];
+﻿#include "vars_and_constants.h""
 
 float vecLen(vec2 a) {
 	float t = sqrt(a.x * a.x + a.y * a.y);
@@ -152,6 +64,19 @@ void generationHeight(float t) {
 	}
 }
 
+vec3 buildProjectorPos2(const vec3 &camera_pos) {
+	float x = camera_pos.x;
+	float y = camera_pos.y;
+	float z = camera_pos.z;
+	if (z < 0) {
+		z = -z;
+	}
+	if (z < SUPP) {
+		z = SUPP;
+	}
+	return vec3(x, y, z);
+}
+
 void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
 	vec4 term = b - a;
 	if (term.z - term.w * h != 0) {
@@ -166,9 +91,6 @@ void intersection(vec4 a, vec4 b, float h, vec4 * trap, int & count) {
 		}
 	}
 }
-
-float* pos = new float [2 * (max_resolution + 1) * (max_resolution + 1)];
-std::vector <int> index;
 
 void idle() {
 	glutPostRedisplay();
@@ -292,12 +214,6 @@ void display() {
 		glUniform1f(glGetUniformLocation(prg, "lx"), lx);
 		glUniform1f(glGetUniformLocation(prg, "lz"), lz);
 		glUniform2fv(glGetUniformLocation(prg, "h_koff"), MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION, value_ptr(h_koff[0])); 
-		/*glUniform1fv(glGetUniformLocation(prg, "ampl"), 8, ampl);
-		glUniform1fv(glGetUniformLocation(prg, "waveLength"), 8, waveLength);
-		glUniform1fv(glGetUniformLocation(prg, "wavePhase"), 8, wavePhase);
-		glUniform1i(glGetUniformLocation(prg, "n_waves"), n_waves);
-		glUniform3fv(glGetUniformLocation(prg, "waveVector"), 8, value_ptr(waveVector[0]));*/
-		//glUniform1f(glGetUniformLocation(prg, "time"), (float) clock() / CLOCKS_PER_SEC);
 	}
 	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
@@ -503,12 +419,6 @@ void TW_CALL set_value (const void *value, void *clientData) {
 	generationH0();
 }
 
-std::string nameSaved = "";
-std::string path = "C:\\Users\\Asus\\Documents\\Cameras\\";
-
-void printCamera(Camera &c, std::ofstream & out) {
-	
-}
 
 void TW_CALL savecamera(void *clientData) { 
     if (nameSaved == "") return;
