@@ -1,3 +1,4 @@
+#include "cuda_fft.h"
 #include <GL\glew.h>
 #include <vector>
 #include <gl\freeglut.h>
@@ -8,18 +9,20 @@
 #include <math.h>
 #include <ctime>
 #include <complex>
-#include <glm\glm.hpp>
-#include <glm\gtc\matrix_transform.hpp> 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp> 
 #include <glm/gtc/matrix_access.hpp>
-#include <glm\gtc\type_ptr.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include "Camera.h"
-#include <GL\AntTweakBar.h>
+#include <GL/AntTweakBar.h>
 #include <cmath>
+
 using namespace glm;
 
-#define MAX_WAVES_RESOLUTION 17
+#define MAX_WAVE_RESOLUTION 64
 
 const int max_resolution = 255;
+float* pos;
 const float DIST = 1.f;
 const float MAXH = 30.f;
 const float SUPP = 1.f;
@@ -28,17 +31,18 @@ int resolution = 100;
 GLuint prg; 
 Camera c_main;
 Camera c_sec;
-float lx = 30.f;
-float lz = 30.f;
-int waves_resolution = 16;
+float lx = 10;
+float lz = 10.f;
 float A_norm = 0.01f;
 vec2 wind = vec2(2.f, 3.f);
 float g = 9.81f;
-vec2 h_koff [MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION];
-std::complex<float> h0 [MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION];
+float h_koff [2 * MAX_WAVE_RESOLUTION * MAX_WAVE_RESOLUTION];
+std::complex<float> h0 [(MAX_WAVE_RESOLUTION  + 1) * (MAX_WAVE_RESOLUTION + 1)];
+float result[MAX_WAVE_RESOLUTION * MAX_WAVE_RESOLUTION];
+GLuint tex;
 GLuint buf_tex;
 GLuint buf_index;
-float* pos = new float [2 * (max_resolution + 1) * (max_resolution + 1)];
+
 std::vector <int> index;
 std::string nameSaved = "";
 std::string path = "C:\\Users\\Asus\\Documents\\Cameras\\";

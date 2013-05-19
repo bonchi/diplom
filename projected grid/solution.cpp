@@ -1,4 +1,4 @@
-﻿#include "vars_and_constants.h""
+﻿#include "vars_and_constants.h"
 
 float vecLen(vec2 a) {
 	float t = sqrt(a.x * a.x + a.y * a.y);
@@ -30,36 +30,34 @@ std::complex<float> get_h0(vec2 k) {
 }
 
 void generationH0() {
-	int t2 = waves_resolution / 2;
-	for (int i = - t2; i <= t2 ; ++i) {
-		for (int j = - t2; j <= t2; ++j) {
-			if ((i == 0) && (j == 0)) {
+	for (int i = 0; i <= MAX_WAVE_RESOLUTION ; ++i) {
+		for (int j = 0; j <= MAX_WAVE_RESOLUTION; ++j) {
+			if ((i - MAX_WAVE_RESOLUTION / 2 == 0) && (j - MAX_WAVE_RESOLUTION / 2 == 0)) {
 				continue;
 			}
-			vec2 k = vec2(2 * PI * i / lx,2 * PI * j / lz);
-			h0[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)] = get_h0(k);			
+			vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
+			h0[(MAX_WAVE_RESOLUTION + 1) * i + j] = get_h0(k);			
 		}	
 	}
 }
 
 std::complex<float> get_h(int i, int j, float t) {
-	std::complex<float> h_0 = h0[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)];
-	std::complex<float> h_1 = h0[(waves_resolution + 1) * (-i + waves_resolution / 2) + (-j + waves_resolution / 2)];
-	vec2 k = vec2(2 * PI * i / lx,2 * PI * j / lz);
+	std::complex<float> h_0 = h0[(MAX_WAVE_RESOLUTION + 1) * i + j];
+	std::complex<float> h_1 = h0[(MAX_WAVE_RESOLUTION + 1) * (MAX_WAVE_RESOLUTION - i) + (MAX_WAVE_RESOLUTION - j)];
+	vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
 	std::complex<float> p (0, sqrt(g * vecLen(k)) * t);
 	return h_0 * exp(p) + std::complex<float>(real(h_1), -imag(h_1)) * exp(-p);
 }
 
 void generationHeight(float t) {	
-	int t2 = waves_resolution / 2;
-	for (int i = - t2; i < t2 ; ++i) {
-		for (int j = - t2; j < t2; ++j) {
-			if ((i == 0) && (j == 0)) {
+	for (int i = 0; i < MAX_WAVE_RESOLUTION; ++i) {
+		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
+			if ((i - MAX_WAVE_RESOLUTION / 2 == 0) && (j - MAX_WAVE_RESOLUTION / 2 == 0)) {
 				continue;
 			}
 			std::complex<float> term =  get_h(i , j, t);
-			h_koff[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)].x = term.real();
-			h_koff[(waves_resolution + 1) * (i + waves_resolution / 2) + (j + waves_resolution / 2)].y = term.imag();
+			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j)] = term.real();
+			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j) +1 ] = term.imag();
 		}	
 	}
 }
@@ -191,11 +189,16 @@ void display() {
 		mat4 m_proj2 =  m_proj * m_range;
 
 		generationHeight((float) clock() / CLOCKS_PER_SEC);
+		do_fft(h_koff, result);
+		glTextureImage2DEXT(tex, GL_TEXTURE_2D, 0, GL_R32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RED, GL_FLOAT, result);
+		glBindTexture(GL_TEXTURE_2D, tex);
+
 
 		glUseProgram(prg);
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
+		
 		glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
@@ -207,13 +210,11 @@ void display() {
 			trap[i] = rc[2 * i + 1] + k * term;
 			float term2 = 0;
 		}
-
+		
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
-		glUniform1i(glGetUniformLocation(prg, "waves_resolution"), waves_resolution);
 		glUniform1f(glGetUniformLocation(prg, "lx"), lx);
 		glUniform1f(glGetUniformLocation(prg, "lz"), lz);
-		glUniform2fv(glGetUniformLocation(prg, "h_koff"), MAX_WAVES_RESOLUTION * MAX_WAVES_RESOLUTION, value_ptr(h_koff[0])); 
 	}
 	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
@@ -247,6 +248,7 @@ void generationgrid(int x0, int x1, int y0, int y1, int wid, int cache_size, std
 }
 
 void rebuildGrid() {
+	 pos = new float [2 * (max_resolution + 1) * (max_resolution + 1)];
 	for (int i = 0; i <= resolution; ++i) {
 		for (int j = 0; j <= resolution; ++j) {
 			pos[2 * (i * (resolution + 1) + j)] = ((float) i) / resolution;
@@ -274,6 +276,9 @@ void init() {
 	glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, NULL);
 	glEnableVertexAttribArray(1);	
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glGenTextures(1, &tex);
+	glTextureParameteriEXT(tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
 	
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
 	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
@@ -327,8 +332,8 @@ void init() {
 		delete [] buff;
 	}
 	
-	if (!param)
-		throw 1;
+	//if (!param)
+	//	throw 1;
 }
 
 void reshape(int width, int height) {
@@ -426,7 +431,7 @@ void TW_CALL savecamera(void *clientData) {
 
 	std::ofstream out(path + nameSaved);
 	out << c_main.printMe() << "\n" << c_sec.printMe() << "\n";
-	out << resolution << " " << lx << " " << lz << " " << waves_resolution << " " << A_norm << " " << wind.x << " " << wind.y << "\n";
+	out << resolution << " " << lx << " " << lz << " " << " " << A_norm << " " << wind.x << " " << wind.y << "\n";
 }
 
 void TW_CALL loadcamera(void *clientData) { 
@@ -438,7 +443,7 @@ void TW_CALL loadcamera(void *clientData) {
 	std::getline(in, secs);
 	c_main = Camera(mains);
 	c_sec = Camera(secs);
-	in >> resolution >> lx >> lz >> waves_resolution >> A_norm >> wind.x >> wind.y;
+	in >> resolution >> lx >> lz >> A_norm >> wind.x >> wind.y;
 	rebuildGrid();
 	generationH0();
 }
