@@ -19,7 +19,7 @@
 
 using namespace glm;
 
-#define MAX_WAVE_RESOLUTION 64
+#define MAX_WAVE_RESOLUTION 128
 
 const int max_resolution = 255;
 float* pos;
@@ -37,7 +37,8 @@ float A_norm = 0.01f;
 vec2 wind = vec2(2.f, 3.f);
 float g = 9.81f;
 float h_koff [2 * MAX_WAVE_RESOLUTION * MAX_WAVE_RESOLUTION];
-std::complex<float> h0 [(MAX_WAVE_RESOLUTION  + 1) * (MAX_WAVE_RESOLUTION + 1)];
+std::complex<float> h0 [MAX_WAVE_RESOLUTION * MAX_WAVE_RESOLUTION];
+std::complex<float> h0_minus [MAX_WAVE_RESOLUTION * MAX_WAVE_RESOLUTION];
 float result[MAX_WAVE_RESOLUTION * MAX_WAVE_RESOLUTION];
 GLuint tex;
 GLuint buf_tex;

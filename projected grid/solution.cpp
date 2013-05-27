@@ -7,43 +7,40 @@ float vecLen(vec2 a) {
 
 float phillipsSpectrum (vec2 k) {
 	float t = vecLen(wind);
-	if (t == 0) {
+	if (t < 0.00001) {
 		return 0;
 	}
 	float l = t * t / g;
 	float kl = vecLen(k);
+	if (kl < 0.00001)
+		return 0;
 	float term = dot(normalize(k),normalize(wind));
-	float t1 = exp(-1 / (kl * kl * l * l));
-	return A_norm * t1 * term * term / (kl * kl * kl * kl);
-}
-
-std::complex<float> get_h0(vec2 k) {
-	double ret = (double)rand() / ((double)rand() + 0.1);
-	float e1 = (float)ret - floor(ret);
-	ret = (double)rand() / ((double)rand() + 0.1);
-	float e2 = (float)ret - floor(ret);
-	float norm1 = cos(2 * PI * e1) * sqrt(- 2 * log(e2));
-	float norm2 = sin(2 * PI * e1) * sqrt(- 2 * log(e2));
-	std::complex<float> c(norm1, norm2);
-	float term =  (float)sqrt( phillipsSpectrum(k) * 0.5);
-	return c * term;
+	float t1 = exp(-1.f / (kl * kl * l * l));
+	return A_norm * t1 * term * term * exp(-kl * kl * l * l * 0.000001)/ (kl * kl * kl * kl);	
 }
 
 void generationH0() {
-	for (int i = 0; i <= MAX_WAVE_RESOLUTION ; ++i) {
-		for (int j = 0; j <= MAX_WAVE_RESOLUTION; ++j) {
-			if ((i - MAX_WAVE_RESOLUTION / 2 == 0) && (j - MAX_WAVE_RESOLUTION / 2 == 0)) {
-				continue;
-			}
+	for (int i = 0; i < MAX_WAVE_RESOLUTION ; ++i) {
+		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
+			srand(NULL);
 			vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
-			h0[(MAX_WAVE_RESOLUTION + 1) * i + j] = get_h0(k);			
+			double ret = ((double)rand() + 1) / ((double)rand() + 1.1);
+			float e1 = (float)ret - floor(ret);
+			ret = ((double)rand() + 1) / ((double)rand() + 1.1);
+			float e2 = (float)ret - floor(ret);
+			float norm1 = cos(2 * PI * e1) * sqrt(- 2 * log(e2));
+			float norm2 = sin(2 * PI * e1) * sqrt(- 2 * log(e2));
+			std::complex<float> c(norm1, norm2);
+			h0[MAX_WAVE_RESOLUTION * i + j] = c * (float)sqrt( phillipsSpectrum(k) * 0.5);
+			h0_minus[MAX_WAVE_RESOLUTION * i + j] = c * (float)sqrt( phillipsSpectrum(vec2(-k.x, -k.y)) * 0.5);
+
 		}	
 	}
 }
 
 std::complex<float> get_h(int i, int j, float t) {
-	std::complex<float> h_0 = h0[(MAX_WAVE_RESOLUTION + 1) * i + j];
-	std::complex<float> h_1 = h0[(MAX_WAVE_RESOLUTION + 1) * (MAX_WAVE_RESOLUTION - i) + (MAX_WAVE_RESOLUTION - j)];
+	std::complex<float> h_0 = h0[MAX_WAVE_RESOLUTION * i + j];
+	std::complex<float> h_1 = h0_minus[MAX_WAVE_RESOLUTION * i + j];
 	vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
 	std::complex<float> p (0, sqrt(g * vecLen(k)) * t);
 	return h_0 * exp(p) + std::complex<float>(real(h_1), -imag(h_1)) * exp(-p);
@@ -52,12 +49,9 @@ std::complex<float> get_h(int i, int j, float t) {
 void generationHeight(float t) {	
 	for (int i = 0; i < MAX_WAVE_RESOLUTION; ++i) {
 		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
-			if ((i - MAX_WAVE_RESOLUTION / 2 == 0) && (j - MAX_WAVE_RESOLUTION / 2 == 0)) {
-				continue;
-			}
 			std::complex<float> term =  get_h(i , j, t);
 			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j)] = term.real();
-			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j) +1 ] = term.imag();
+			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j) + 1 ] = term.imag();
 		}	
 	}
 }
