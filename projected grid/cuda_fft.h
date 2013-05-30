@@ -4,14 +4,21 @@
 
 namespace
 {
-	const int N = 128;
+	const int N = 64;
 }
 
-void do_fft(float const *h, float *result) {
+cufftHandle plan;
+cufftComplex *data;
+cufftComplex term[N * N];
 
-	cufftHandle plan;
-	cufftComplex *data;
-	cufftComplex term[N * N];
+int fftshift(int idx) {
+	if (idx >= N / 2)
+		return idx - N / 2;
+	else 
+		return idx + N / 2;
+}
+
+void calc() {
 	cudaMalloc((void**)&data, sizeof(cufftComplex) * N * N);
 
 	if (cudaGetLastError() != cudaSuccess){
@@ -19,7 +26,7 @@ void do_fft(float const *h, float *result) {
 		return;	
 	}
 
-	if (cudaMemcpy (data, h, N * N * 2 * sizeof(float), cudaMemcpyHostToDevice) != cudaSuccess) {
+	if (cudaMemcpy (data, term, N * N * sizeof(cufftComplex), cudaMemcpyHostToDevice) != cudaSuccess) {
 		fprintf(stderr, "Cuda error: Failed to copy data to device\n");
 		return;	
 	}
@@ -48,14 +55,67 @@ void do_fft(float const *h, float *result) {
 		fprintf(stderr, "Cuda error: Failed to copy data to host\n");
 		return;	
 	}
+}
+
+void do_fft(float const *h, float *result, float lx, float lz) {
+
+	
+	for (int i = 0; i < N; ++i) {
+		for (int j = 0;j < N; ++j) {
+			int shifti = fftshift(i);
+			int shiftj = fftshift(j);
+			term[i * N + j].x = h[shifti * 2 * N + 2 * shiftj];
+			term[i * N + j].y = h[shifti * 2 * N + 2 * shiftj + 1];
+		}
+	}
+
+	calc();
 
 	for (int i = 0; i < N * N; ++i) {
-		result[i] = term[i].x;
+		result[3 * i] = term[i].x;
+	}
+
+	for (int i = 0; i < N; ++i) {
+		for (int j = 0; j < N; ++j) {
+			float kx = 2 * PI * (i - N / 2) / lx;
+			int shifti = fftshift(i);
+			int shiftj = fftshift(j);
+			term[i * N + j].x = -kx * h[shifti * 2 * N + 2 * shiftj + 1];
+			term[i * N + j].y = kx * h[shifti * 2 * N + 2 * shiftj];
+		}
+	}
+
+	calc();
+
+	for (int i = 0; i < N * N; ++i) {
+		result[3 * i + 1] = term[i].x;
+	}
+
+	for (int i = 0; i < N; ++i) {
+		for (int j = 0; j < N; ++j) {
+			float kz = 2 * PI * (j - N / 2) / lz;
+			int shifti = fftshift(i);
+			int shiftj = fftshift(j);
+			term[i * N + j].x = -kz * h[shifti * 2 * N + 2 * shiftj + 1];
+			term[i * N + j].y = kz * h[shifti * 2 * N + 2 * shiftj];
+		}
+	}
+
+	calc();
+
+	for (int i = 0; i < N * N; ++i) {
+		result[3 * i + 2] = term[i].x;
 	}
 
 	cufftDestroy(plan);
 	cudaFree(data);
 	/*float h2[N * N * 2];
+	for (int i = 0; i < 2 * N * N; ++i) {
+		h2[i] = 0;
+	}
+	//h2[2*N] = 1;
+	//h2[2*N*(N-1)]=1;
+	h2[2 * (N / 2) * N]=1;
 	for (int t1 = 0; t1 < N; ++t1) {
 		for (int t2 = 0; t2 < N; ++t2) {
 			float res = 0;
@@ -64,8 +124,8 @@ void do_fft(float const *h, float *result) {
 				float res_im = 0;
 				for (int j = 0; j < N; ++j) {
 					float l = -2 * PI * j * t1 / N;
-					res_r += h[i * N * 2 + j * 2] * cos (l) - h[2 * N * i + j * 2 + 1] * sin (l);
-					res_im += h[i * N * 2 + j * 2 + 1] * cos (l) + h[2 * N * i + j * 2] * sin (l);
+					res_r += h2[j * N * 2 + i * 2] * cos (l) - h2[2 * N * j + i * 2 + 1] * sin (l);
+					res_im += h2[j * N * 2 + j * 2 + 1] * cos (l) + h2[2 * N * j + i * 2] * sin (l);
 				}
 				float l = -2 * PI * i * t2 / N;
 				res += res_r* cos (l) - res_im * sin (l);
