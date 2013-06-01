@@ -5,6 +5,11 @@ float vecLen(vec2 a) {
 	return t;
 }
 
+float Pkoeff(float a) {
+	float t = 0.01 + 0.001 * a;
+	return t * t;
+}
+
 float phillipsSpectrum (vec2 k) {
 	float t = vecLen(wind);
 	if (t == 0) {
@@ -13,10 +18,11 @@ float phillipsSpectrum (vec2 k) {
 	float l = t * t / g;
 	float kl = vecLen(k);
 	float term = dot(normalize(k),normalize(wind));
-	if (term < 0) {
+	if (term < 0) {	
 		term = 0;
 	}
 	float t1 = exp(-1 / (kl * kl * l * l));
+	//return A_norm * t1 * term * term * exp(-kl * kl * l * l * Pkoeff(c_main.pos().z))/ (kl * kl * kl * kl);
 	return A_norm * t1 * term * term / (kl * kl * kl * kl);
 }
 
@@ -190,18 +196,23 @@ void display() {
 
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
 		mat4 m_proj2 =  m_proj * m_range;
-		generationHeight((float) clock() / CLOCKS_PER_SEC);
+		glUseProgram(prg);
+
+		generationHeight(0.5 * (float) clock() / CLOCKS_PER_SEC);
 		do_fft(h_koff, result, lx, lz);
+		glActiveTexture(GL_TEXTURE0);
 		glTextureImage2DEXT(tex, GL_TEXTURE_2D, 0, GL_RGB32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RGB, GL_FLOAT, result);
 		glBindTexture(GL_TEXTURE_2D, tex);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, tex_sky);
 
-
-		glUseProgram(prg);
+		
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
 		
-		glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
+		//glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
+		glPatchParameteri ( GL_PATCH_VERTICES, 3);
+		glDrawElements(GL_PATCHES, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
 			rc[i] = m_proj2 * cube[i];
@@ -212,11 +223,26 @@ void display() {
 			trap[i] = rc[2 * i + 1] + k * term;
 			float term2 = 0;
 		}
-		
+
+		vec3 pos_c = c_main.pos();
+		glUniform1i(glGetUniformLocation(prg, "inner_level"), inner_level);
+		glUniform1i(glGetUniformLocation(prg, "outer_level"), outer_level);
+		glUniform1i(glGetUniformLocation(prg, "tex_tex"), 0);
+		glUniform1i(glGetUniformLocation(prg, "sky"), 1);
+		glUniform3fv(glGetUniformLocation(prg, "sun_direction"), 1, value_ptr(sun_direction));	
+		glUniform3fv(glGetUniformLocation(prg, "camera"), 1, value_ptr(pos_c));
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
 		glUniform1f(glGetUniformLocation(prg, "lx"), lx);
 		glUniform1f(glGetUniformLocation(prg, "lz"), lz);
+		glUniform3fv(glGetUniformLocation(prg, "c0"), 1, value_ptr(c0));	
+		glUniform3fv(glGetUniformLocation(prg, "c90"), 1, value_ptr(c90));
+		//glUniform3fv(glGetUniformLocation(prg, "sky"), 1, value_ptr(sky));
+		glUniform3fv(glGetUniformLocation(prg, "specular"), 1, value_ptr(specular));
+		glUniform1f(glGetUniformLocation(prg, "specular_strength"), specular_strength);
+		glUniform1f(glGetUniformLocation(prg, "specular_power"), specular_power);
+		glUniform1i(glGetUniformLocation(prg, "geometry"), geometry);
+		
 	}
 	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
@@ -280,10 +306,21 @@ void init() {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glGenTextures(1, &tex);
 	glTextureParameteriEXT(tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	AUX_RGBImageRec *texture1;
+	texture1 = auxDIBImageLoad("sky1.bmp");
+	glGenTextures(1, &tex_sky);
+	glBindTexture(GL_TEXTURE_2D, tex_sky);
+	//glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, texture1->sizeX, texture1->sizeY, 0,
+		GL_RGB, GL_UNSIGNED_BYTE, texture1->data);
+	glEnable(GL_TEXTURE_2D);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-	
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
 	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
+	GLuint tcshader = glCreateShader(GL_TESS_CONTROL_SHADER);
+	GLuint teshader = glCreateShader(GL_TESS_EVALUATION_SHADER);
 	int size;
 	{
 		std::ifstream stin("vshader.glsl");
@@ -313,15 +350,46 @@ void init() {
 		size = source.length();
 		glShaderSource(fshader, 1, (const GLchar **)&buffer, &size);
 	}
-
+	{
+		std::ifstream stin("tcshader.glsl");
+		std::string source;
+		while (stin)
+		{
+			std::string line;
+			getline(stin, line);
+			source += line;
+			source += "\n";
+		}
+		char const * buffer = source.c_str();
+		size = source.length();
+		glShaderSource(tcshader, 1, (const GLchar **)&buffer, &size);
+	}
+	{
+		std::ifstream stin("teshader.glsl");
+		std::string source;
+		while (stin)
+		{
+			std::string line;
+			getline(stin, line);
+			source += line;
+			source += "\n";
+		}
+		char const * buffer = source.c_str();
+		size = source.length();
+		glShaderSource(teshader, 1, (const GLchar **)&buffer, &size);
+	}
 	glCompileShader(vshader);
 	GLint param;
 
 	glCompileShader(fshader);
+	glCompileShader(tcshader);
+	glCompileShader(teshader);
 
 	prg = glCreateProgram();
 	glAttachShader(prg, vshader);
 	glAttachShader(prg, fshader);
+	glAttachShader(prg, tcshader);
+	glAttachShader(prg, teshader);
 	glLinkProgram(prg);
 
 	glGetProgramiv(prg, GL_LINK_STATUS, &param);
@@ -450,6 +518,15 @@ void TW_CALL loadcamera(void *clientData) {
 	generationH0();
 }
 
+void TW_CALL geometry_on_off(void *clientData) { 
+	if (geometry) {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
+	} else {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);	
+	}
+	geometry = !geometry;
+}
+
 void TW_CALL CopyStdStringToClient(std::string& destinationClientString, const std::string& sourceLibraryString) {
   destinationClientString = sourceLibraryString;
 }
@@ -461,7 +538,11 @@ void initTW () {
 	TwBar *bar = TwNewBar("Parameters");
 	TwDefine(" Parameters size='400 600' color='170 30 20' alpha=200 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
-				" min=1 max=255 step=10");
+				" min=1 max=400 step=10");
+	TwAddVarRW(bar, "Inner Level", TW_TYPE_INT32, &inner_level,
+				" min=1 max=30 step=1");
+	TwAddVarRW(bar, "Outer Level", TW_TYPE_INT32, &outer_level,
+				" min=1 max=30 step=1");
 	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
 				NULL);
 	TwAddVarCB(bar, "LZ", TW_TYPE_FLOAT, set_value, get_value, &lz,
@@ -472,6 +553,16 @@ void initTW () {
 				NULL);
 	TwAddVarCB(bar, "Wind_Y", TW_TYPE_FLOAT, set_value, get_value, &wind.y,
 				NULL);
+	
+	TwAddVarRW(bar, "C0" , TW_TYPE_COLOR3F, &c0, " group='Water' ");
+	TwAddVarRW(bar, "C90" , TW_TYPE_COLOR3F, &c90, " group='Water' ");
+	TwAddVarRW(bar, "Specular" , TW_TYPE_COLOR3F, &specular, " group='Sun' ");
+	TwAddVarRW(bar, "specular_strength" , TW_TYPE_FLOAT, &specular_strength, "min=0 max=200 step=5 group='Sun' ");
+	TwAddVarRW(bar, "specular_power" , TW_TYPE_FLOAT, &specular_power, "min=0 max=120 step=5 group='Sun' ");
+	TwAddButton(bar, "GEOMETRY", geometry_on_off, NULL, NULL);
+	TwAddVarRW(bar, "LightDir", TW_TYPE_DIR3F, &sun_direction,
+               " label='Light direction' opened=true  ");
+
 	TwStructMember pointMembers[] = { 
         { "X", TW_TYPE_FLOAT, offsetof(Point, X), NULL},
         { "Y", TW_TYPE_FLOAT, offsetof(Point, Y), NULL },

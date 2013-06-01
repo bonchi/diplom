@@ -1,22 +1,23 @@
-#version 330
-#define MAX_WAVE_RESOLUTION 64
+﻿#version 400
 
-layout (location = 1) in vec3 texPos;
+#define MAX_WAVE_RESOLUTION 32
+
+layout(triangles, equal_spacing) in;
 
 uniform mat4 m_mvp;
 uniform float lx;
 uniform float lz;
-uniform vec4 trap[4];
 uniform sampler2D tex_tex;
 
-out vec4 worldPos;
+out vec3 worldPos;
+out vec3 tex_data;
 
-void main() {
-	vec4 Vertex0 = mix(trap[0], trap[1], texPos.x);
-	vec4 Vertex1 = mix(trap[3], trap[2], texPos.x);
-	vec4 Vertex = mix(Vertex0, Vertex1, texPos.y);
+void main(void)
+{
+	vec4 Vertex = gl_TessCoord.x * gl_in [0].gl_Position + 
+				gl_TessCoord.y * gl_in [1].gl_Position +
+				gl_TessCoord.z * gl_in [2].gl_Position;
 	Vertex /= Vertex.w;
-	worldPos = Vertex;
 	vec2 term;
 	float kx = - (MAX_WAVE_RESOLUTION - 1) * lx / MAX_WAVE_RESOLUTION;
 	float kz = - (MAX_WAVE_RESOLUTION - 1) * lz / MAX_WAVE_RESOLUTION;
@@ -28,6 +29,8 @@ void main() {
 	if (term.y > 0) {
 		term.y += kz;
 	}
-	Vertex.z = texture(tex_tex, vec2(term.x / kx, term.y / kz)).x;
+	tex_data = texture(tex_tex, vec2(term.x / kx, term.y / kz)).xyz;
+	Vertex.z = tex_data.x;
+	worldPos = Vertex.xyz;
 	gl_Position = m_mvp * Vertex;
 }

@@ -4,7 +4,7 @@
 
 namespace
 {
-	const int N = 64;
+	const int N = 32;
 }
 
 cufftHandle plan;
@@ -20,9 +20,12 @@ int fftshift(int idx) {
 
 void calc() {
 	cudaMalloc((void**)&data, sizeof(cufftComplex) * N * N);
-
-	if (cudaGetLastError() != cudaSuccess){
-		fprintf(stderr, "Cuda error: Failed to allocate\n");
+	cudaError_t err = cudaGetLastError();
+	int deviceCount;
+	cudaGetDeviceCount(&deviceCount);
+	if (err != cudaSuccess){
+		fprintf(stderr, cudaGetErrorString(err));
+		fprintf(stderr, "Cuda error: Failed to allocate %d\n", deviceCount);
 		return;	
 	}
 
@@ -55,6 +58,7 @@ void calc() {
 		fprintf(stderr, "Cuda error: Failed to copy data to host\n");
 		return;	
 	}
+	
 }
 
 void do_fft(float const *h, float *result, float lx, float lz) {
@@ -74,12 +78,12 @@ void do_fft(float const *h, float *result, float lx, float lz) {
 	for (int i = 0; i < N * N; ++i) {
 		result[3 * i] = term[i].x;
 	}
-
+	
 	for (int i = 0; i < N; ++i) {
 		for (int j = 0; j < N; ++j) {
-			float kx = 2 * PI * (i - N / 2) / lx;
 			int shifti = fftshift(i);
 			int shiftj = fftshift(j);
+			float kx = 2 * PI * (shifti - N / 2) / lx;
 			term[i * N + j].x = -kx * h[shifti * 2 * N + 2 * shiftj + 1];
 			term[i * N + j].y = kx * h[shifti * 2 * N + 2 * shiftj];
 		}
@@ -93,9 +97,9 @@ void do_fft(float const *h, float *result, float lx, float lz) {
 
 	for (int i = 0; i < N; ++i) {
 		for (int j = 0; j < N; ++j) {
-			float kz = 2 * PI * (j - N / 2) / lz;
 			int shifti = fftshift(i);
 			int shiftj = fftshift(j);
+			float kz = 2 * PI * (shiftj - N / 2) / lz;
 			term[i * N + j].x = -kz * h[shifti * 2 * N + 2 * shiftj + 1];
 			term[i * N + j].y = kz * h[shifti * 2 * N + 2 * shiftj];
 		}
@@ -106,7 +110,6 @@ void do_fft(float const *h, float *result, float lx, float lz) {
 	for (int i = 0; i < N * N; ++i) {
 		result[3 * i + 2] = term[i].x;
 	}
-
 	cufftDestroy(plan);
 	cudaFree(data);
 	/*float h2[N * N * 2];
