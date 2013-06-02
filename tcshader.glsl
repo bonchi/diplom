@@ -2,8 +2,8 @@
 
 layout ( vertices = 3 ) out;  
 
-uniform int inner_level;
-uniform int outer_level;      
+uniform float inner_level;
+uniform float outer_level;      
 
 void main ()
 {                

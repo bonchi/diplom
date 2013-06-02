@@ -4,12 +4,16 @@
 
 namespace
 {
-	const int N = 32;
+	const int N = 64;
 }
 
 cufftHandle plan;
 cufftComplex *data;
 cufftComplex term[N * N];
+
+void fft_init() {
+	cudaMalloc((void**)&data, sizeof(cufftComplex) * N * N);
+}
 
 int fftshift(int idx) {
 	if (idx >= N / 2)
@@ -19,7 +23,6 @@ int fftshift(int idx) {
 }
 
 void calc() {
-	cudaMalloc((void**)&data, sizeof(cufftComplex) * N * N);
 	cudaError_t err = cudaGetLastError();
 	int deviceCount;
 	cudaGetDeviceCount(&deviceCount);
@@ -110,8 +113,6 @@ void do_fft(float const *h, float *result, float lx, float lz) {
 	for (int i = 0; i < N * N; ++i) {
 		result[3 * i + 2] = term[i].x;
 	}
-	cufftDestroy(plan);
-	cudaFree(data);
 	/*float h2[N * N * 2];
 	for (int i = 0; i < 2 * N * N; ++i) {
 		h2[i] = 0;

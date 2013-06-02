@@ -197,7 +197,6 @@ void display() {
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
 		mat4 m_proj2 =  m_proj * m_range;
 		glUseProgram(prg);
-
 		generationHeight(0.5 * (float) clock() / CLOCKS_PER_SEC);
 		do_fft(h_koff, result, lx, lz);
 		glActiveTexture(GL_TEXTURE0);
@@ -225,8 +224,8 @@ void display() {
 		}
 
 		vec3 pos_c = c_main.pos();
-		glUniform1i(glGetUniformLocation(prg, "inner_level"), inner_level);
-		glUniform1i(glGetUniformLocation(prg, "outer_level"), outer_level);
+		glUniform1f(glGetUniformLocation(prg, "inner_level"), inner_level);
+		glUniform1f(glGetUniformLocation(prg, "outer_level"), outer_level);
 		glUniform1i(glGetUniformLocation(prg, "tex_tex"), 0);
 		glUniform1i(glGetUniformLocation(prg, "sky"), 1);
 		glUniform3fv(glGetUniformLocation(prg, "sun_direction"), 1, value_ptr(sun_direction));	
@@ -295,6 +294,7 @@ void rebuildGrid() {
 }
 
 void init() {
+	fft_init();
 	srand(time(0));
 	generationH0();
 	glGenBuffers(1, &buf_tex);
@@ -409,6 +409,7 @@ void init() {
 void reshape(int width, int height) {
    TwWindowSize(width, height);
    glViewport(0, 0, width, height);
+   c_sec.set_aspect(1.f * width / height);
 }
 
 bool flag = true;
@@ -451,6 +452,7 @@ void key(unsigned char k, int x, int y) {
 		c_main.key(k);
 	}
 	display();
+
 }
 
 struct Point { 
@@ -539,10 +541,10 @@ void initTW () {
 	TwDefine(" Parameters size='400 600' color='170 30 20' alpha=200 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
 				" min=1 max=400 step=10");
-	TwAddVarRW(bar, "Inner Level", TW_TYPE_INT32, &inner_level,
-				" min=1 max=30 step=1");
-	TwAddVarRW(bar, "Outer Level", TW_TYPE_INT32, &outer_level,
-				" min=1 max=30 step=1");
+	TwAddVarRW(bar, "Inner Level", TW_TYPE_FLOAT, &inner_level,
+				" min=1 max=30 step=0.5");
+	TwAddVarRW(bar, "Outer Level", TW_TYPE_FLOAT, &outer_level,
+				" min=1 max=30 step=0.5");
 	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
 				NULL);
 	TwAddVarCB(bar, "LZ", TW_TYPE_FLOAT, set_value, get_value, &lz,

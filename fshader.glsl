@@ -1,5 +1,4 @@
 #version 400
-#define MAX_WAVE_RESOLUTION 32
 
 layout (location = 0) out vec4 col;
 

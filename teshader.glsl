@@ -1,6 +1,6 @@
 ﻿#version 400
 
-#define MAX_WAVE_RESOLUTION 32
+#define MAX_WAVE_RESOLUTION 64
 
 layout(triangles, equal_spacing) in;
 

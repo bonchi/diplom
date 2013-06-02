@@ -20,7 +20,7 @@
 
 using namespace glm;
 
-#define MAX_WAVE_RESOLUTION 32
+#define MAX_WAVE_RESOLUTION 64
 
 const int max_resolution = 400;
 float* pos;
@@ -46,8 +46,8 @@ GLuint buf_tex;
 GLuint buf_index;
 GLuint tex_sky;
 vec3 sun_direction = vec3(0.89, -0.27, 0.43);
-int inner_level = 1;
-int outer_level = 1;
+float inner_level = 1.f;
+float outer_level = 1.f;
 
 std::vector <int> index;
 std::string nameSaved = "";

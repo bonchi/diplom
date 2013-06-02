@@ -10,7 +10,7 @@ mat4 Camera::view() {
 		rotate(mat4(1), heading_, vec3(0, 1, 0)) *
 		lookAt(pos_, pos_ + vec3(1, 0, 0), vec3(0, 0, 1));
 }
- 
+
 float Camera::getPitch() {
 	return pitch_;
 }
@@ -66,6 +66,12 @@ void Camera::move_vert(float diff) {
 }
  
 void Camera::set_aspect(float aspect) {
+	float sin_b = aspect_ *  sin(fovy_ * PI / 360) ;
+	if (sin_b / aspect > 1) {
+		fovy_ = 179;
+	} else {
+		fovy_ = 360 * asin(sin_b / aspect) / PI;
+	}
 	aspect_ = aspect;
 }
 
@@ -103,10 +109,10 @@ void Camera::key(unsigned char k) {
 	if (k == 'r') {
 		roll(10 * term);
 	}
-	if (k == 'q') {
+	if (k == 'w') {
 		move(term);
 	}
-	if (k == 'e') {
+	if (k == 's') {
 		 move(-term);
 	 }
 	 if (k == 'd') {
@@ -117,11 +123,11 @@ void Camera::key(unsigned char k) {
 		move_side(-term);
 	 }
 
-	 if (k == 'w') {
+	 if (k == 'e') {
 		move_vert(term);
 	 }
 
-	 if (k == 's') {
+	 if (k == 'q') {
 		move_vert(-term);
 	 }
 }
