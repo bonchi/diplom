@@ -12,7 +12,7 @@ uniform int wave_res;
 uniform float inner_big_part;
 uniform float outer_big_part;
 uniform float koef_inner_density;
-
+uniform float koef_outter_density;
 patch bool flag;
 
 out vec2 pos[3];
@@ -118,7 +118,7 @@ void main ()
 			for (int j = int(min_max[i1].z); j <= int(min_max[i1].w); ++j) {
 				int t = check_q(i, j, i1, i2);
 				if (t == 1) {
-					tout[ID] += texture(density, vec2(i / (wave_res - 1), j / (wave_res - 1))).x;
+					tout[ID] += koef_outter_density * texture(density, vec2(i / (wave_res - 1), j / (wave_res - 1))).x;
 				} else if (t == 2) {
 					if (viewed(i, j, i1)) continue;
 					tin[ID] += koef_inner_density * texture(density, vec2(i / (wave_res - 1), j / (wave_res - 1))).x;

@@ -251,6 +251,7 @@ void display() {
 		glUniform1f(glGetUniformLocation(prg, "inner_big_part"), inner_big_part);
 		glUniform1f(glGetUniformLocation(prg, "outer_big_part"), outer_big_part);
 		glUniform1f(glGetUniformLocation(prg, "koef_inner_density"), koef_inner_density);
+		glUniform1f(glGetUniformLocation(prg, "koef_outter_density"), koef_outter_density);
 		glUniform1f(glGetUniformLocation(prg, "inner_level"), inner_level);
 		glUniform1f(glGetUniformLocation(prg, "outer_level"), outer_level);
 		glUniform1i(glGetUniformLocation(prg, "tex_tex"), 0);
@@ -582,6 +583,8 @@ void initTW () {
 	TwAddVarRW(bar, "Density koeff", TW_TYPE_FLOAT, &koef_density, 
 				NULL);
 	TwAddVarRW(bar, "Inner density koeff", TW_TYPE_FLOAT, &koef_inner_density, 
+				NULL);
+	TwAddVarRW(bar, "Outer density koeff", TW_TYPE_FLOAT, &koef_outter_density, 
 				NULL);
 	TwAddVarRW(bar, "Outer partitional big triag", TW_TYPE_FLOAT, &outer_big_part,
 				NULL);

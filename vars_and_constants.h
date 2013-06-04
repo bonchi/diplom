@@ -30,7 +30,7 @@ const float DIST = 1.f;
 const float MAXH = 30.f;
 const float SUPP = 1.f;
 const float SLOW = -1.f;
-int resolution = 10;
+int resolution = 30;
 GLuint prg; 
 Camera c_main;
 Camera c_sec;
@@ -66,6 +66,7 @@ UINT TextureArray[1];
 float koef_density = 5;
 float inner_big_part = 1;
 float koef_inner_density = 0.2;
+float koef_outter_density = 1;
 float outer_big_part = 1;
 
 //z
