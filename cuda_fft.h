@@ -1,10 +1,11 @@
 #include <cufft.h>
 #include <cuda_runtime.h>
-#define PI 3.141592653589793238f
+#include <assert.h>
 
+#define PI 3.141592653589793238f
 namespace
 {
-	const int N = 64;
+	const int N = 128;
 }
 
 cufftHandle plan;
@@ -13,27 +14,10 @@ cufftComplex term[N * N];
 
 void fft_init() {
 	cudaMalloc((void**)&data, sizeof(cufftComplex) * N * N);
-}
-
-int fftshift(int idx) {
-	if (idx >= N / 2)
-		return idx - N / 2;
-	else 
-		return idx + N / 2;
-}
-
-void calc() {
 	cudaError_t err = cudaGetLastError();
-	int deviceCount;
-	cudaGetDeviceCount(&deviceCount);
 	if (err != cudaSuccess){
 		fprintf(stderr, cudaGetErrorString(err));
-		fprintf(stderr, "Cuda error: Failed to allocate %d\n", deviceCount);
-		return;	
-	}
-
-	if (cudaMemcpy (data, term, N * N * sizeof(cufftComplex), cudaMemcpyHostToDevice) != cudaSuccess) {
-		fprintf(stderr, "Cuda error: Failed to copy data to device\n");
+		fprintf(stderr, "Cuda error: Failed to allocate \n");
 		return;	
 	}
 
@@ -47,6 +31,20 @@ void calc() {
 		return;		
 	}
 
+}
+
+int fftshift(int idx) {
+	if (idx >= N / 2)
+		return idx - N / 2;
+	else 
+		return idx + N / 2;
+}
+
+void calc() {
+	if (cudaMemcpy(data, term, N * N * sizeof(cufftComplex), cudaMemcpyHostToDevice) != cudaSuccess) {
+		fprintf(stderr, "Cuda error: Failed to copy data to device\n");
+		return;	
+	}
 	if (cufftExecC2C(plan, data, data, CUFFT_FORWARD) != CUFFT_SUCCESS) {
 		fprintf(stderr, "CUFFT Error: Unable to execute plan\n");
 		return;		
@@ -57,16 +55,37 @@ void calc() {
    		return;
 	}	
 
-	if (cudaMemcpy (term, data, N * N * sizeof(cufftComplex), cudaMemcpyDeviceToHost) != cudaSuccess) {
+	if (cudaMemcpy(term, data, N * N * sizeof(cufftComplex), cudaMemcpyDeviceToHost) != cudaSuccess) {
 		fprintf(stderr, "Cuda error: Failed to copy data to host\n");
 		return;	
 	}
 	
 }
 
-void do_fft(float const *h, float *result, float lx, float lz) {
+float max(float a, float b) {
+	if (a < b) return b;
+	return a;
+}
 
-	
+float min(float a, float b) {
+	if (a < b) return a;
+	return b;
+}
+
+float max_diff(int i, int j) {
+	float max_ = term[N * i + j].x;
+	max_ = max(max_, term[N * i + j + 1].x); 
+	max_ = max(max_, term[N * (i + 1) + j + 1].x); 
+	max_ = max(max_, term[N * (i + 1) + j].x);
+	float min_ = term[N * i + j].x;
+	min_ = min(min_, term[N * i + j + 1].x); 
+	min_ = min(min_, term[N * (i + 1) + j + 1].x); 
+	min_ = min(min_, term[N * (i + 1) + j].x);
+	return abs(max_ - min_);
+}
+
+void do_fft(float const *h, float *result, float *density, float lx, float lz, float koef_density) {
+
 	for (int i = 0; i < N; ++i) {
 		for (int j = 0;j < N; ++j) {
 			int shifti = fftshift(i);
@@ -77,9 +96,33 @@ void do_fft(float const *h, float *result, float lx, float lz) {
 	}
 
 	calc();
+	
+	/*float min_ = term[0].x;
+	float max_ = term[0].x;
+	for (int i = 0; i < N * N; ++i) {
+		result[3 * i] = term[i].x;
+		if (min_ > term[i].x) {
+			min_ = term[i].x;
+		}
+		if (max_ < term[i].x) {
+			max_ = term[i].x;
+		}
+	}
+	float H = max_ - min_;
+	for (int i = 0; i < N - 1; ++i) {
+		for (int j = 0; j < N - 1; ++j) {
+			density[i * (N - 1) + j] = koef_density * max_diff(i, j) / H;
+		}
+	}*/
 
 	for (int i = 0; i < N * N; ++i) {
 		result[3 * i] = term[i].x;
+	}
+
+	for (int i = 0; i < N - 1; ++i) {
+		for (int j = 0; j < N - 1; ++j) {
+			density[i * (N - 1) + j] = koef_density * max_diff(i, j);
+		}
 	}
 	
 	for (int i = 0; i < N; ++i) {

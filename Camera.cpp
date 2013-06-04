@@ -26,11 +26,11 @@ float Camera::getHeading() {
 }
 
 mat4 Camera::mvp() {
-	return perspective(fovy_, aspect_, .1f, 100.f) * view();
+	return perspective(fovy_, aspect_, .1f, 200.f) * view();
 }
 
 mat4 Camera::perm() {
-	return perspective(fovy_, aspect_, .1f, 100.f);	
+	return perspective(fovy_, aspect_, .1f, 200.f);	
 }
  
 vec3 Camera::dir() {
@@ -105,7 +105,7 @@ void Camera::motionMouse(int x, int y) {
 }
 
 void Camera::key(unsigned char k) {
-	float term = 0.1f;
+	float term = 0.5f;
 	if (k == 'r') {
 		roll(10 * term);
 	}

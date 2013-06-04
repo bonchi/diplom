@@ -1,5 +1,4 @@
 #version 400 core
-#define MAX_WAVE_RESOLUTION 64
 
 layout (location = 1) in vec3 texPos;
 

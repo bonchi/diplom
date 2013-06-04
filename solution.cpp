@@ -17,6 +17,9 @@ float phillipsSpectrum (vec2 k) {
 	}
 	float l = t * t / g;
 	float kl = vecLen(k);
+	if ((kl == 0) || (l == 0)){
+		return 0;
+	}
 	float term = dot(normalize(k),normalize(wind));
 	if (term < 0) {	
 		term = 0;
@@ -27,12 +30,18 @@ float phillipsSpectrum (vec2 k) {
 }
 
 std::complex<float> get_h0(vec2 k) {
-	//Box–Muller_transform
-	double ret = (double)rand() / ((double)rand() + 0.1);
-	float e1 = (float)ret - floor(ret);
-	ret = (double)rand() / ((double)rand() + 0.1);
-	float e2 = (float)ret - floor(ret);
-	float alg = log(4.);
+	//Box–Muller_transformes
+	float e1 = 0;
+	float e2 = 0;
+	double ret;
+	while(e1 == 0) {
+		ret = (double)rand() / ((double)rand() + 0.1);
+		e1 = (float)ret - floor(ret);
+	}
+	while(e2 == 0) {
+		ret = (double)rand() / ((double)rand() + 0.1);
+		e2 = (float)ret - floor(ret);
+	}
 	float norm1 = cos(2 * PI * e1) * sqrt(- 2 * log(e2));
 	float norm2 = sin(2 * PI * e1) * sqrt(- 2 * log(e2));
 	std::complex<float> c(norm1, norm2);
@@ -41,21 +50,28 @@ std::complex<float> get_h0(vec2 k) {
 }
 
 void generationH0() {
-	for (int i = 0; i <= MAX_WAVE_RESOLUTION ; ++i) {
-		for (int j = 0; j <= MAX_WAVE_RESOLUTION; ++j) {
+	for (int i = 0; i < MAX_WAVE_RESOLUTION ; ++i) {
+		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
+			vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
 			if ((i - MAX_WAVE_RESOLUTION / 2 == 0) && (j - MAX_WAVE_RESOLUTION / 2 == 0)) {
-				h0[(MAX_WAVE_RESOLUTION + 1) * i + j] = 0;
+				h0[MAX_WAVE_RESOLUTION * i + j] = 0;
+				h0_minus[MAX_WAVE_RESOLUTION * i + j] = get_h0(-k);	
 				continue;
 			}
-			vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
-			h0[(MAX_WAVE_RESOLUTION + 1) * i + j] = get_h0(k);			
+			if ((MAX_WAVE_RESOLUTION / 2 - i == 0) && (MAX_WAVE_RESOLUTION / 2  - i== 0)) {
+				h0[MAX_WAVE_RESOLUTION * i + j] =  get_h0(k);
+				h0_minus[MAX_WAVE_RESOLUTION * i + j] = 0;	
+				continue;
+			}
+			h0[MAX_WAVE_RESOLUTION * i + j] = get_h0(k);	
+			h0_minus[MAX_WAVE_RESOLUTION * i + j] = get_h0(-k);	
 		}	
 	}
 }
 
 std::complex<float> get_h(int i, int j, float t) {
-	std::complex<float> h_0 = h0[(MAX_WAVE_RESOLUTION + 1) * i + j];
-	std::complex<float> h_1 = h0[(MAX_WAVE_RESOLUTION + 1) * (MAX_WAVE_RESOLUTION - i) + (MAX_WAVE_RESOLUTION - j)];
+	std::complex<float> h_0 = h0[MAX_WAVE_RESOLUTION * i + j];
+	std::complex<float> h_1 = h0_minus[MAX_WAVE_RESOLUTION * i + j];
 	vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
 	std::complex<float> p (0, sqrt(g * vecLen(k)) * t);
 	return h_0 * exp(p) + std::complex<float>(real(h_1), -imag(h_1)) * exp(-p);
@@ -65,6 +81,7 @@ void generationHeight(float t) {
 	for (int i = 0; i < MAX_WAVE_RESOLUTION; ++i) {
 		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
 			std::complex<float> term =  get_h(i , j, t);
+			assert(term.real() == term.real() && term.imag() == term.imag());
 			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j)] = term.real();
 			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j) + 1] = term.imag();
 		}	
@@ -198,12 +215,15 @@ void display() {
 		mat4 m_proj2 =  m_proj * m_range;
 		glUseProgram(prg);
 		generationHeight(0.5 * (float) clock() / CLOCKS_PER_SEC);
-		do_fft(h_koff, result, lx, lz);
+		do_fft(h_koff, result, density, lx, lz, koef_density);
 		glActiveTexture(GL_TEXTURE0);
 		glTextureImage2DEXT(tex, GL_TEXTURE_2D, 0, GL_RGB32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RGB, GL_FLOAT, result);
 		glBindTexture(GL_TEXTURE_2D, tex);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, tex_sky);
+		glActiveTexture(GL_TEXTURE2);
+		glTextureImage2DEXT(density_tex, GL_TEXTURE_2D, 0, GL_R32F, MAX_WAVE_RESOLUTION - 1, MAX_WAVE_RESOLUTION - 1, 0, GL_RED, GL_FLOAT, density);
+		glBindTexture(GL_TEXTURE_2D, density_tex);
 
 		
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
@@ -223,25 +243,33 @@ void display() {
 			float term2 = 0;
 		}
 
+		//check_tess(trap);
+
 		vec3 pos_c = c_main.pos();
+		
+		
+		glUniform1f(glGetUniformLocation(prg, "inner_big_part"), inner_big_part);
+		glUniform1f(glGetUniformLocation(prg, "outer_big_part"), outer_big_part);
+		glUniform1f(glGetUniformLocation(prg, "koef_inner_density"), koef_inner_density);
 		glUniform1f(glGetUniformLocation(prg, "inner_level"), inner_level);
 		glUniform1f(glGetUniformLocation(prg, "outer_level"), outer_level);
 		glUniform1i(glGetUniformLocation(prg, "tex_tex"), 0);
 		glUniform1i(glGetUniformLocation(prg, "sky"), 1);
+		glUniform1i(glGetUniformLocation(prg, "density"), 2);
 		glUniform3fv(glGetUniformLocation(prg, "sun_direction"), 1, value_ptr(sun_direction));	
 		glUniform3fv(glGetUniformLocation(prg, "camera"), 1, value_ptr(pos_c));
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
 		glUniform1f(glGetUniformLocation(prg, "lx"), lx);
 		glUniform1f(glGetUniformLocation(prg, "lz"), lz);
-		glUniform3fv(glGetUniformLocation(prg, "c0"), 1, value_ptr(c0));	
-		glUniform3fv(glGetUniformLocation(prg, "c90"), 1, value_ptr(c90));
+		glUniform4fv(glGetUniformLocation(prg, "c0"), 1, value_ptr(c0));	
+		glUniform4fv(glGetUniformLocation(prg, "c90"), 1, value_ptr(c90));
 		//glUniform3fv(glGetUniformLocation(prg, "sky"), 1, value_ptr(sky));
 		glUniform3fv(glGetUniformLocation(prg, "specular"), 1, value_ptr(specular));
 		glUniform1f(glGetUniformLocation(prg, "specular_strength"), specular_strength);
 		glUniform1f(glGetUniformLocation(prg, "specular_power"), specular_power);
 		glUniform1i(glGetUniformLocation(prg, "geometry"), geometry);
-		
+		glUniform1i(glGetUniformLocation(prg, "wave_res"), MAX_WAVE_RESOLUTION);
 	}
 	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
@@ -304,16 +332,24 @@ void init() {
 	glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, NULL);
 	glEnableVertexAttribArray(1);	
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
 	glGenTextures(1, &tex);
 	glTextureParameteriEXT(tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	AUX_RGBImageRec *texture1;
-	texture1 = auxDIBImageLoad("sky1.bmp");
+	glTextureParameteriEXT(tex, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+
+	glGenTextures(1, &density_tex);
+	glTextureParameteriEXT(density_tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteriEXT(density_tex, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+
+	Image sky;
+	Blob blob;
+	sky.read("sky.bmp" );
+	sky.write(&blob, "RGB", 8);
 	glGenTextures(1, &tex_sky);
 	glBindTexture(GL_TEXTURE_2D, tex_sky);
-	//glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, 3, texture1->sizeX, texture1->sizeY, 0,
-		GL_RGB, GL_UNSIGNED_BYTE, texture1->data);
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, sky.columns(), sky.rows(), 0, GL_RGB, GL_UNSIGNED_BYTE, blob.data());
 	glEnable(GL_TEXTURE_2D);
 	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -541,10 +577,14 @@ void initTW () {
 	TwDefine(" Parameters size='400 600' color='170 30 20' alpha=200 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
 				" min=1 max=400 step=10");
-	TwAddVarRW(bar, "Inner Level", TW_TYPE_FLOAT, &inner_level,
-				" min=1 max=30 step=0.5");
-	TwAddVarRW(bar, "Outer Level", TW_TYPE_FLOAT, &outer_level,
-				" min=1 max=30 step=0.5");
+	TwAddVarRW(bar, "Inner partitional big triag", TW_TYPE_FLOAT, &inner_big_part,
+				NULL);
+	TwAddVarRW(bar, "Density koeff", TW_TYPE_FLOAT, &koef_density, 
+				NULL);
+	TwAddVarRW(bar, "Inner density koeff", TW_TYPE_FLOAT, &koef_inner_density, 
+				NULL);
+	TwAddVarRW(bar, "Outer partitional big triag", TW_TYPE_FLOAT, &outer_big_part,
+				NULL);
 	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
 				NULL);
 	TwAddVarCB(bar, "LZ", TW_TYPE_FLOAT, set_value, get_value, &lz,
@@ -598,6 +638,8 @@ int main(int argc, char ** argv)
 {
 	
 	glutInit(&argc, argv);
+	InitializeMagick(NULL);
+
 	glutInitDisplayMode(GLUT_ACCUM | GLUT_RGBA | GLUT_DEPTH);
 	glutInitWindowSize (1000, 1000);
 	glutCreateWindow( "window" );
