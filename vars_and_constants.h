@@ -63,9 +63,9 @@ vec3 specular = vec3(0.81, 0.7, 0.23);
 float specular_strength = 20.f;
 float specular_power = 100;
 UINT TextureArray[1];	
-float koef_density = 1;
+float koef_density = 5;
 float inner_big_part = 1;
-float koef_inner_density = 1;
+float koef_inner_density = 0.2;
 float outer_big_part = 1;
 
 //z
