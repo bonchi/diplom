@@ -1,92 +1,5 @@
 ﻿#include "vars_and_constants.h"
-
-float vecLen(vec2 a) {
-	float t = sqrt(a.x * a.x + a.y * a.y);
-	return t;
-}
-
-float Pkoeff(float a) {
-	float t = 0.01 + 0.001 * a;
-	return t * t;
-}
-
-float phillipsSpectrum (vec2 k) {
-	float t = vecLen(wind);
-	if (t == 0) {
-		return 0;
-	}
-	float l = t * t / g;
-	float kl = vecLen(k);
-	if ((kl == 0) || (l == 0)){
-		return 0;
-	}
-	float term = dot(normalize(k),normalize(wind));
-	if (term < 0) {	
-		term = 0;
-	}
-	float t1 = exp(-1 / (kl * kl * l * l));
-	//return A_norm * t1 * term * term * exp(-kl * kl * l * l * Pkoeff(c_main.pos().z))/ (kl * kl * kl * kl);
-	return A_norm * t1 * term * term / (kl * kl * kl * kl);
-}
-
-std::complex<float> get_h0(vec2 k) {
-	//Box–Muller_transformes
-	float e1 = 0;
-	float e2 = 0;
-	double ret;
-	while(e1 == 0) {
-		ret = (double)rand() / ((double)rand() + 0.1);
-		e1 = (float)ret - floor(ret);
-	}
-	while(e2 == 0) {
-		ret = (double)rand() / ((double)rand() + 0.1);
-		e2 = (float)ret - floor(ret);
-	}
-	float norm1 = cos(2 * PI * e1) * sqrt(- 2 * log(e2));
-	float norm2 = sin(2 * PI * e1) * sqrt(- 2 * log(e2));
-	std::complex<float> c(norm1, norm2);
-	float term =  (float)sqrt( phillipsSpectrum(k) * 0.5);
-	return c * term;
-}
-
-void generationH0() {
-	for (int i = 0; i < MAX_WAVE_RESOLUTION ; ++i) {
-		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
-			vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
-			if ((i - MAX_WAVE_RESOLUTION / 2 == 0) && (j - MAX_WAVE_RESOLUTION / 2 == 0)) {
-				h0[MAX_WAVE_RESOLUTION * i + j] = 0;
-				h0_minus[MAX_WAVE_RESOLUTION * i + j] = get_h0(-k);	
-				continue;
-			}
-			if ((MAX_WAVE_RESOLUTION / 2 - i == 0) && (MAX_WAVE_RESOLUTION / 2  - i== 0)) {
-				h0[MAX_WAVE_RESOLUTION * i + j] =  get_h0(k);
-				h0_minus[MAX_WAVE_RESOLUTION * i + j] = 0;	
-				continue;
-			}
-			h0[MAX_WAVE_RESOLUTION * i + j] = get_h0(k);	
-			h0_minus[MAX_WAVE_RESOLUTION * i + j] = get_h0(-k);	
-		}	
-	}
-}
-
-std::complex<float> get_h(int i, int j, float t) {
-	std::complex<float> h_0 = h0[MAX_WAVE_RESOLUTION * i + j];
-	std::complex<float> h_1 = h0_minus[MAX_WAVE_RESOLUTION * i + j];
-	vec2 k = vec2(2 * PI * (i - MAX_WAVE_RESOLUTION / 2) / lx, 2 * PI * (j - MAX_WAVE_RESOLUTION / 2) / lz);
-	std::complex<float> p (0, sqrt(g * vecLen(k)) * t);
-	return h_0 * exp(p) + std::complex<float>(real(h_1), -imag(h_1)) * exp(-p);
-}
-
-void generationHeight(float t) {	
-	for (int i = 0; i < MAX_WAVE_RESOLUTION; ++i) {
-		for (int j = 0; j < MAX_WAVE_RESOLUTION; ++j) {
-			std::complex<float> term =  get_h(i , j, t);
-			assert(term.real() == term.real() && term.imag() == term.imag());
-			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j)] = term.real();
-			h_koff[2 * (MAX_WAVE_RESOLUTION * i + j) + 1] = term.imag();
-		}	
-	}
-}
+#include <cstdlib>
 
 vec3 buildProjectorPos2(const vec3 &camera_pos) {
 	float x = camera_pos.x;
@@ -214,24 +127,20 @@ void display() {
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
 		mat4 m_proj2 =  m_proj * m_range;
 		glUseProgram(prg);
-		generationHeight(0.5 * (float) clock() / CLOCKS_PER_SEC);
-		do_fft(h_koff, result, density, lx, lz, koef_density);
+
+		generation_h(0.5 * (float) clock() / CLOCKS_PER_SEC);
+		do_fft(result);
 		glActiveTexture(GL_TEXTURE0);
 		glTextureImage2DEXT(tex, GL_TEXTURE_2D, 0, GL_RGB32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RGB, GL_FLOAT, result);
 		glBindTexture(GL_TEXTURE_2D, tex);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, tex_sky);
-		glActiveTexture(GL_TEXTURE2);
-		glTextureImage2DEXT(density_tex, GL_TEXTURE_2D, 0, GL_R32F, MAX_WAVE_RESOLUTION - 1, MAX_WAVE_RESOLUTION - 1, 0, GL_RED, GL_FLOAT, density);
-		glBindTexture(GL_TEXTURE_2D, density_tex);
 
 		
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
 		
-		//glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
-		glPatchParameteri ( GL_PATCH_VERTICES, 3);
-		glDrawElements(GL_PATCHES, index.size(), GL_UNSIGNED_INT, NULL);
+		glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
 			rc[i] = m_proj2 * cube[i];
@@ -243,20 +152,9 @@ void display() {
 			float term2 = 0;
 		}
 
-		//check_tess(trap);
-
 		vec3 pos_c = c_main.pos();
-		
-		
-		glUniform1f(glGetUniformLocation(prg, "inner_big_part"), inner_big_part);
-		glUniform1f(glGetUniformLocation(prg, "outer_big_part"), outer_big_part);
-		glUniform1f(glGetUniformLocation(prg, "koef_inner_density"), koef_inner_density);
-		glUniform1f(glGetUniformLocation(prg, "koef_outter_density"), koef_outter_density);
-		glUniform1f(glGetUniformLocation(prg, "inner_level"), inner_level);
-		glUniform1f(glGetUniformLocation(prg, "outer_level"), outer_level);
 		glUniform1i(glGetUniformLocation(prg, "tex_tex"), 0);
 		glUniform1i(glGetUniformLocation(prg, "sky"), 1);
-		glUniform1i(glGetUniformLocation(prg, "density"), 2);
 		glUniform3fv(glGetUniformLocation(prg, "sun_direction"), 1, value_ptr(sun_direction));	
 		glUniform3fv(glGetUniformLocation(prg, "camera"), 1, value_ptr(pos_c));
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
@@ -270,7 +168,7 @@ void display() {
 		glUniform1f(glGetUniformLocation(prg, "specular_strength"), specular_strength);
 		glUniform1f(glGetUniformLocation(prg, "specular_power"), specular_power);
 		glUniform1i(glGetUniformLocation(prg, "geometry"), geometry);
-		glUniform1i(glGetUniformLocation(prg, "wave_res"), MAX_WAVE_RESOLUTION);
+		
 	}
 	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
@@ -323,9 +221,7 @@ void rebuildGrid() {
 }
 
 void init() {
-	fft_init();
-	srand(time(0));
-	generationH0();
+	generation_h0(lx, lz, wind.x, wind.y, A_norm);
 	glGenBuffers(1, &buf_tex);
 	glGenBuffers(1, &buf_index);
 	rebuildGrid();
@@ -333,31 +229,20 @@ void init() {
 	glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, NULL);
 	glEnableVertexAttribArray(1);	
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
 	glGenTextures(1, &tex);
 	glTextureParameteriEXT(tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTextureParameteriEXT(tex, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-
-	glGenTextures(1, &density_tex);
-	glTextureParameteriEXT(density_tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTextureParameteriEXT(density_tex, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-
-	Image sky;
-	Blob blob;
-	sky.read("sky.bmp" );
-	sky.write(&blob, "RGB", 8);
+	AUX_RGBImageRec *texture1;
+	texture1 = auxDIBImageLoad("sky.bmp");
 	glGenTextures(1, &tex_sky);
 	glBindTexture(GL_TEXTURE_2D, tex_sky);
-	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	//glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, 3, sky.columns(), sky.rows(), 0, GL_RGB, GL_UNSIGNED_BYTE, blob.data());
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, texture1->sizeX, texture1->sizeY, 0,
+		GL_RGB, GL_UNSIGNED_BYTE, texture1->data);
 	glEnable(GL_TEXTURE_2D);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
 	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
-	GLuint tcshader = glCreateShader(GL_TESS_CONTROL_SHADER);
-	GLuint teshader = glCreateShader(GL_TESS_EVALUATION_SHADER);
 	int size;
 	{
 		std::ifstream stin("vshader.glsl");
@@ -387,46 +272,15 @@ void init() {
 		size = source.length();
 		glShaderSource(fshader, 1, (const GLchar **)&buffer, &size);
 	}
-	{
-		std::ifstream stin("tcshader.glsl");
-		std::string source;
-		while (stin)
-		{
-			std::string line;
-			getline(stin, line);
-			source += line;
-			source += "\n";
-		}
-		char const * buffer = source.c_str();
-		size = source.length();
-		glShaderSource(tcshader, 1, (const GLchar **)&buffer, &size);
-	}
-	{
-		std::ifstream stin("teshader.glsl");
-		std::string source;
-		while (stin)
-		{
-			std::string line;
-			getline(stin, line);
-			source += line;
-			source += "\n";
-		}
-		char const * buffer = source.c_str();
-		size = source.length();
-		glShaderSource(teshader, 1, (const GLchar **)&buffer, &size);
-	}
+
 	glCompileShader(vshader);
 	GLint param;
 
 	glCompileShader(fshader);
-	glCompileShader(tcshader);
-	glCompileShader(teshader);
 
 	prg = glCreateProgram();
 	glAttachShader(prg, vshader);
 	glAttachShader(prg, fshader);
-	glAttachShader(prg, tcshader);
-	glAttachShader(prg, teshader);
 	glLinkProgram(prg);
 
 	glGetProgramiv(prg, GL_LINK_STATUS, &param);
@@ -446,7 +300,6 @@ void init() {
 void reshape(int width, int height) {
    TwWindowSize(width, height);
    glViewport(0, 0, width, height);
-   c_sec.set_aspect(1.f * width / height);
 }
 
 bool flag = true;
@@ -489,7 +342,6 @@ void key(unsigned char k, int x, int y) {
 		c_main.key(k);
 	}
 	display();
-
 }
 
 struct Point { 
@@ -531,14 +383,14 @@ void TW_CALL get_value (void *value, void *clientData) {
 
 void TW_CALL set_value (const void *value, void *clientData) {
 	*static_cast<float *>(clientData) = *(const float*)value;
-	generationH0();
+	generation_h0(lx, lz, wind.x, wind.y, A_norm);
 }
 
 
 void TW_CALL savecamera(void *clientData) { 
     if (nameSaved == "") return;
 
-	std::ofstream out(path + nameSaved);
+	std::ofstream out((path + nameSaved).c_str());
 	out << c_main.printMe() << "\n" << c_sec.printMe() << "\n";
 	out << resolution << " " << lx << " " << lz << " " << " " << A_norm << " " << wind.x << " " << wind.y << "\n";
 }
@@ -546,7 +398,7 @@ void TW_CALL savecamera(void *clientData) {
 void TW_CALL loadcamera(void *clientData) { 
     if (nameSaved == "") return;
 
-	std::ifstream in(path + nameSaved);
+	std::ifstream in((path + nameSaved).c_str());
 	std::string mains, secs;
 	std::getline(in, mains);
 	std::getline(in, secs);
@@ -554,7 +406,7 @@ void TW_CALL loadcamera(void *clientData) {
 	c_sec = Camera(secs);
 	in >> resolution >> lx >> lz >> A_norm >> wind.x >> wind.y;
 	rebuildGrid();
-	generationH0();
+	generation_h0(lx, lz, wind.x, wind.y, A_norm);
 }
 
 void TW_CALL geometry_on_off(void *clientData) { 
@@ -578,16 +430,6 @@ void initTW () {
 	TwDefine(" Parameters size='400 600' color='170 30 20' alpha=200 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
 				" min=1 max=400 step=10");
-	TwAddVarRW(bar, "Inner partitional big triag", TW_TYPE_FLOAT, &inner_big_part,
-				NULL);
-	TwAddVarRW(bar, "Density koeff", TW_TYPE_FLOAT, &koef_density, 
-				NULL);
-	TwAddVarRW(bar, "Inner density koeff", TW_TYPE_FLOAT, &koef_inner_density, 
-				NULL);
-	TwAddVarRW(bar, "Outer density koeff", TW_TYPE_FLOAT, &koef_outter_density, 
-				NULL);
-	TwAddVarRW(bar, "Outer partitional big triag", TW_TYPE_FLOAT, &outer_big_part,
-				NULL);
 	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
 				NULL);
 	TwAddVarCB(bar, "LZ", TW_TYPE_FLOAT, set_value, get_value, &lz,
@@ -599,8 +441,8 @@ void initTW () {
 	TwAddVarCB(bar, "Wind_Y", TW_TYPE_FLOAT, set_value, get_value, &wind.y,
 				NULL);
 	
-	TwAddVarRW(bar, "C0" , TW_TYPE_COLOR3F, &c0, " group='Water' ");
-	TwAddVarRW(bar, "C90" , TW_TYPE_COLOR3F, &c90, " group='Water' ");
+	TwAddVarRW(bar, "C0" , TW_TYPE_COLOR4F, &c0, " group='Water' ");
+	TwAddVarRW(bar, "C90" , TW_TYPE_COLOR4F, &c90, " group='Water' ");
 	TwAddVarRW(bar, "Specular" , TW_TYPE_COLOR3F, &specular, " group='Sun' ");
 	TwAddVarRW(bar, "specular_strength" , TW_TYPE_FLOAT, &specular_strength, "min=0 max=200 step=5 group='Sun' ");
 	TwAddVarRW(bar, "specular_power" , TW_TYPE_FLOAT, &specular_power, "min=0 max=120 step=5 group='Sun' ");
@@ -639,10 +481,9 @@ void initTW () {
 
 int main(int argc, char ** argv)
 {
-	
+	cuda_init();
+	cuda_init_h();
 	glutInit(&argc, argv);
-	InitializeMagick(NULL);
-
 	glutInitDisplayMode(GLUT_ACCUM | GLUT_RGBA | GLUT_DEPTH);
 	glutInitWindowSize (1000, 1000);
 	glutCreateWindow( "window" );

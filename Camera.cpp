@@ -10,7 +10,7 @@ mat4 Camera::view() {
 		rotate(mat4(1), heading_, vec3(0, 1, 0)) *
 		lookAt(pos_, pos_ + vec3(1, 0, 0), vec3(0, 0, 1));
 }
-
+ 
 float Camera::getPitch() {
 	return pitch_;
 }
@@ -26,11 +26,11 @@ float Camera::getHeading() {
 }
 
 mat4 Camera::mvp() {
-	return perspective(fovy_, aspect_, .1f, 200.f) * view();
+	return perspective(fovy_, aspect_, .1f, 100.f) * view();
 }
 
 mat4 Camera::perm() {
-	return perspective(fovy_, aspect_, .1f, 200.f);	
+	return perspective(fovy_, aspect_, .1f, 100.f);	
 }
  
 vec3 Camera::dir() {
@@ -66,12 +66,6 @@ void Camera::move_vert(float diff) {
 }
  
 void Camera::set_aspect(float aspect) {
-	float sin_b = aspect_ *  sin(fovy_ * PI / 360) ;
-	if (sin_b / aspect > 1) {
-		fovy_ = 179;
-	} else {
-		fovy_ = 360 * asin(sin_b / aspect) / PI;
-	}
 	aspect_ = aspect;
 }
 
@@ -105,14 +99,14 @@ void Camera::motionMouse(int x, int y) {
 }
 
 void Camera::key(unsigned char k) {
-	float term = 0.5f;
+	float term = 0.1f;
 	if (k == 'r') {
 		roll(10 * term);
 	}
-	if (k == 'w') {
+	if (k == 'q') {
 		move(term);
 	}
-	if (k == 's') {
+	if (k == 'e') {
 		 move(-term);
 	 }
 	 if (k == 'd') {
@@ -123,11 +117,11 @@ void Camera::key(unsigned char k) {
 		move_side(-term);
 	 }
 
-	 if (k == 'e') {
+	 if (k == 'w') {
 		move_vert(term);
 	 }
 
-	 if (k == 'q') {
+	 if (k == 's') {
 		move_vert(-term);
 	 }
 }
