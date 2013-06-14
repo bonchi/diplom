@@ -1,5 +1,51 @@
-﻿#include "vars_and_constants.h"
-#include <cstdlib>
+﻿#include <memory>
+#include "vars_and_constants.h"
+
+struct cube_map_t {
+	cube_map_t(std::string const& dir) {
+		glGenTextures(1, &tex_);
+
+		glTextureParameteriEXT(tex_, GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTextureParameteriEXT(tex_, GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+		for (int i = 0; i < NUM_LAYERS; i++)
+			load_cube_map(dir + "\\" + layer_suf[i] + ".jpg", layer[i]);
+	}
+
+	void bind(GLenum tex_unit) {
+		glActiveTexture(tex_unit);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, tex_);
+	}
+
+	~cube_map_t() {
+		glDeleteTextures(1, &tex_);
+	}
+
+private:
+	void load_cube_map(std::string const& file_name, GLenum layer) {
+		Image cm_layer;
+		cm_layer.read(file_name);
+		Blob blob;
+		cm_layer.write(&blob, "RGB", 8);
+		glTextureImage2DEXT(tex_, layer, 0, GL_RGB32F, cm_layer.columns(), cm_layer.rows(), 0, GL_RGB, GL_UNSIGNED_BYTE, blob.data());
+	}
+
+	static const int NUM_LAYERS = 6;
+	static char const * layer_suf[NUM_LAYERS];
+	static GLenum layer[NUM_LAYERS];
+
+private:
+	GLuint tex_;
+};
+
+char const * cube_map_t::layer_suf[cube_map_t::NUM_LAYERS] = { "negx", "negy", "negz", "posx", "posy", "posz" };
+GLenum cube_map_t::layer[cube_map_t::NUM_LAYERS] = {  
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_X, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 
+	GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_TEXTURE_CUBE_MAP_POSITIVE_Y, GL_TEXTURE_CUBE_MAP_POSITIVE_Z };
+
+namespace {
+	std::shared_ptr<cube_map_t> env_cm;
+}
 
 vec3 buildProjectorPos2(const vec3 &camera_pos) {
 	float x = camera_pos.x;
@@ -127,20 +173,49 @@ void display() {
 		mat4 m_range = mat4(vec4(xmax - xmin, 0, 0, 0),vec4(0, ymax - ymin, 0, 0), vec4(0, 0, 1, 0), vec4(xmin, ymin, 0, 1));
 		mat4 m_proj2 =  m_proj * m_range;
 		glUseProgram(prg);
+		if (!pause) {
+			generation_h(0.5 * (float) clock() / CLOCKS_PER_SEC);
+		}
 
-		generation_h(0.5 * (float) clock() / CLOCKS_PER_SEC);
-		do_fft(result);
+		cudaArray * hf = NULL;
+		cudaArray * hf_nx = NULL;
+		cudaArray * hf_ny = NULL;
+
+		cudaError_t l;
+
+		l = cudaGraphicsMapResources(1, &resource1, 0);
+		l = cudaGraphicsMapResources(1, &resource2, 0);
+		l = cudaGraphicsMapResources(1, &resource3, 0);
+		l = cudaGraphicsMapResources(1, &resource4, 0);
+
+		l = cudaGraphicsSubResourceGetMappedArray (&hf,  resource1, 0, 0);
+		l = cudaGraphicsSubResourceGetMappedArray (&hf_nx, resource2, 0, 0);
+		l = cudaGraphicsSubResourceGetMappedArray (&hf_ny, resource3, 0, 0);
+
+		do_fft(hf, hf_nx, hf_ny, resource4);
+
+		l = cudaGraphicsUnmapResources(1, &resource1, 0);
+		l = cudaGraphicsUnmapResources(1, &resource2, 0);
+		l = cudaGraphicsUnmapResources(1, &resource3, 0);
+		l = cudaGraphicsUnmapResources(1, &resource4, 0);
+
 		glActiveTexture(GL_TEXTURE0);
-		glTextureImage2DEXT(tex, GL_TEXTURE_2D, 0, GL_RGB32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RGB, GL_FLOAT, result);
-		glBindTexture(GL_TEXTURE_2D, tex);
+		glBindTexture(GL_TEXTURE_2D, h_field);
 		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, normal_x_field);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, normal_y_field);
+		glActiveTexture(GL_TEXTURE3);
 		glBindTexture(GL_TEXTURE_2D, tex_sky);
-
-		
+		glActiveTexture(GL_TEXTURE4);
+		glBindTexture(GL_TEXTURE_2D, density);
 		glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);
+		//env_cm->bind(GL_TEXTURE5);
 		
-		glDrawElements(GL_TRIANGLES, index.size(), GL_UNSIGNED_INT, NULL);
+
+		glPatchParameteri ( GL_PATCH_VERTICES, 3);
+		glDrawElements(GL_PATCHES, index.size(), GL_UNSIGNED_INT, NULL);
 
 		for (int i = 0; i < 8; ++i) {
 			rc[i] = m_proj2 * cube[i];
@@ -153,11 +228,22 @@ void display() {
 		}
 
 		vec3 pos_c = c_main.pos();
-		glUniform1i(glGetUniformLocation(prg, "tex_tex"), 0);
-		glUniform1i(glGetUniformLocation(prg, "sky"), 1);
+
+		glUniform1f(glGetUniformLocation(prg, "inner_big_part"), inner_big_part);
+		glUniform1f(glGetUniformLocation(prg, "outer_big_part"), outer_big_part);
+		glUniform1f(glGetUniformLocation(prg, "koef_inner_density"), koef_inner_density);
+		glUniform1f(glGetUniformLocation(prg, "koef_outter_density"), koef_outter_density);
+		glUniform1f(glGetUniformLocation(prg, "inner_level"), inner_level);
+		glUniform1f(glGetUniformLocation(prg, "outer_level"), outer_level);
+		glUniform1i(glGetUniformLocation(prg, "h_field"), 0);
+		glUniform1i(glGetUniformLocation(prg, "normal_x_field"), 1);
+		glUniform1i(glGetUniformLocation(prg, "normal_y_field"), 2);
+		glUniform1i(glGetUniformLocation(prg, "sky"), 3);
+		glUniform1i(glGetUniformLocation(prg, "density"), 4);
 		glUniform3fv(glGetUniformLocation(prg, "sun_direction"), 1, value_ptr(sun_direction));	
 		glUniform3fv(glGetUniformLocation(prg, "camera"), 1, value_ptr(pos_c));
 		glUniformMatrix4fv(glGetUniformLocation(prg, "m_mvp"), 1, false, value_ptr(m2));
+		glUniformMatrix4fv(glGetUniformLocation(prg, "m_camera"), 1, false, value_ptr(m));
 		glUniform4fv(glGetUniformLocation(prg, "trap"), 4, value_ptr(trap[0]));
 		glUniform1f(glGetUniformLocation(prg, "lx"), lx);
 		glUniform1f(glGetUniformLocation(prg, "lz"), lz);
@@ -168,9 +254,11 @@ void display() {
 		glUniform1f(glGetUniformLocation(prg, "specular_strength"), specular_strength);
 		glUniform1f(glGetUniformLocation(prg, "specular_power"), specular_power);
 		glUniform1i(glGetUniformLocation(prg, "geometry"), geometry);
-		
+		glUniform1i(glGetUniformLocation(prg, "wave_res"), MAX_WAVE_RESOLUTION);
+		glUniform1i(glGetUniformLocation(prg, "number_texel"), number_texel);
+		glUniform1i(glGetUniformLocation(prg, "number_level"), (int)log2(1.f * MAX_WAVE_RESOLUTION) + 1);
+		glUniform1i(glGetUniformLocation(prg, "tex_env"), 5);
 	}
-	assert(glGetError() == GL_NO_ERROR);
 	TwDraw();
 	glFlush();
 	glutSwapBuffers();
@@ -220,29 +308,74 @@ void rebuildGrid() {
 	glNamedBufferDataEXT(buf_index, t * sizeof(int), ind, GL_STATIC_DRAW);
 }
 
+
+
 void init() {
+
+	glGenTextures(1, &h_field);
+	glBindTexture(GL_TEXTURE_2D, h_field);
+	glTextureParameteriEXT(h_field, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteriEXT(h_field, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RG, GL_FLOAT, NULL);
+
+	glGenTextures(1, &normal_x_field);
+	glBindTexture(GL_TEXTURE_2D, normal_x_field);
+	glTextureParameteriEXT(normal_x_field, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteriEXT(normal_x_field, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RG, GL_FLOAT, NULL);
+
+	glGenTextures(1, &normal_y_field);
+	glBindTexture(GL_TEXTURE_2D, normal_y_field);
+	glTextureParameteriEXT(normal_y_field, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteriEXT(normal_y_field, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RG, GL_FLOAT, NULL);
+
+	glGenTextures(1, &density);
+	glBindTexture(GL_TEXTURE_2D, density);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, MAX_WAVE_RESOLUTION, MAX_WAVE_RESOLUTION, 0, GL_RED, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);  
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glGenerateMipmap(GL_TEXTURE_2D);
+ 
+	cudaError_t l;
+	l = cudaGraphicsGLRegisterImage(&resource1, h_field, GL_TEXTURE_2D, cudaGraphicsMapFlagsNone);
+	l = cudaGraphicsGLRegisterImage(&resource2, normal_x_field, GL_TEXTURE_2D, cudaGraphicsMapFlagsNone);
+	l = cudaGraphicsGLRegisterImage(&resource3, normal_y_field, GL_TEXTURE_2D, cudaGraphicsMapFlagsNone);
+	l = cudaGraphicsGLRegisterImage(&resource4, density, GL_TEXTURE_2D, cudaGraphicsMapFlagsNone);
+
 	generation_h0(lx, lz, wind.x, wind.y, A_norm);
 	glGenBuffers(1, &buf_tex);
 	glGenBuffers(1, &buf_index);
 	rebuildGrid();
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 	glBindBuffer(GL_ARRAY_BUFFER, buf_tex);
 	glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, NULL);
 	glEnableVertexAttribArray(1);	
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glGenTextures(1, &tex);
-	glTextureParameteriEXT(tex, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	AUX_RGBImageRec *texture1;
-	texture1 = auxDIBImageLoad("sky.bmp");
+
+	Image sky;
+	Blob blob;
+	sky.read("sky1.bmp" );
+	sky.write(&blob, "RGB", 8);
+
+	//env_cm.reset(new cube_map_t("C:\\Users\\kaa\\Downloads\\Pond"));
+
 	glGenTextures(1, &tex_sky);
 	glBindTexture(GL_TEXTURE_2D, tex_sky);
-	//glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 	glTextureParameteriEXT(tex_sky, GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, 3, texture1->sizeX, texture1->sizeY, 0,
-		GL_RGB, GL_UNSIGNED_BYTE, texture1->data);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, sky.columns(), sky.rows(), 0, GL_RGB, GL_UNSIGNED_BYTE, blob.data());
 	glEnable(GL_TEXTURE_2D);
+	if (geometry) {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	} else {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	}
 
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
 	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
+	GLuint tcshader = glCreateShader(GL_TESS_CONTROL_SHADER);
+	GLuint teshader = glCreateShader(GL_TESS_EVALUATION_SHADER);
 	int size;
 	{
 		std::ifstream stin("vshader.glsl");
@@ -272,15 +405,46 @@ void init() {
 		size = source.length();
 		glShaderSource(fshader, 1, (const GLchar **)&buffer, &size);
 	}
-
+	{
+		std::ifstream stin("tcshader.glsl");
+		std::string source;
+		while (stin)
+		{
+			std::string line;
+			getline(stin, line);
+			source += line;
+			source += "\n";
+		}
+		char const * buffer = source.c_str();
+		size = source.length();
+		glShaderSource(tcshader, 1, (const GLchar **)&buffer, &size);
+	}
+	{
+		std::ifstream stin("teshader.glsl");
+		std::string source;
+		while (stin)
+		{
+			std::string line;
+			getline(stin, line);
+			source += line;
+			source += "\n";
+		}
+		char const * buffer = source.c_str();
+		size = source.length();
+		glShaderSource(teshader, 1, (const GLchar **)&buffer, &size);
+	}
 	glCompileShader(vshader);
 	GLint param;
 
 	glCompileShader(fshader);
+	glCompileShader(tcshader);
+	glCompileShader(teshader);
 
 	prg = glCreateProgram();
 	glAttachShader(prg, vshader);
 	glAttachShader(prg, fshader);
+	glAttachShader(prg, tcshader);
+	glAttachShader(prg, teshader);
 	glLinkProgram(prg);
 
 	glGetProgramiv(prg, GL_LINK_STATUS, &param);
@@ -300,6 +464,7 @@ void init() {
 void reshape(int width, int height) {
    TwWindowSize(width, height);
    glViewport(0, 0, width, height);
+   c_sec.set_aspect(1.f * width / height);
 }
 
 bool flag = true;
@@ -342,6 +507,7 @@ void key(unsigned char k, int x, int y) {
 		c_main.key(k);
 	}
 	display();
+
 }
 
 struct Point { 
@@ -390,7 +556,7 @@ void TW_CALL set_value (const void *value, void *clientData) {
 void TW_CALL savecamera(void *clientData) { 
     if (nameSaved == "") return;
 
-	std::ofstream out((path + nameSaved).c_str());
+	std::ofstream out(path + nameSaved);
 	out << c_main.printMe() << "\n" << c_sec.printMe() << "\n";
 	out << resolution << " " << lx << " " << lz << " " << " " << A_norm << " " << wind.x << " " << wind.y << "\n";
 }
@@ -398,7 +564,7 @@ void TW_CALL savecamera(void *clientData) {
 void TW_CALL loadcamera(void *clientData) { 
     if (nameSaved == "") return;
 
-	std::ifstream in((path + nameSaved).c_str());
+	std::ifstream in(path + nameSaved);
 	std::string mains, secs;
 	std::getline(in, mains);
 	std::getline(in, secs);
@@ -418,6 +584,10 @@ void TW_CALL geometry_on_off(void *clientData) {
 	geometry = !geometry;
 }
 
+void TW_CALL pause_button(void *clientData) { 
+	pause = !pause;
+}
+
 void TW_CALL CopyStdStringToClient(std::string& destinationClientString, const std::string& sourceLibraryString) {
   destinationClientString = sourceLibraryString;
 }
@@ -429,7 +599,7 @@ void initTW () {
 	TwBar *bar = TwNewBar("Parameters");
 	TwDefine(" Parameters size='400 600' color='170 30 20' alpha=200 valueswidth=220 text=dark position='20 70' ");
 	TwAddVarRW(bar, "Resolution", TW_TYPE_INT32, &resolution,
-				" min=1 max=400 step=10");
+				" min=1 max=5000 step=10");
 	TwAddVarCB(bar, "LX", TW_TYPE_FLOAT, set_value, get_value, &lx,
 				NULL);
 	TwAddVarCB(bar, "LZ", TW_TYPE_FLOAT, set_value, get_value, &lz,
@@ -441,12 +611,7 @@ void initTW () {
 	TwAddVarCB(bar, "Wind_Y", TW_TYPE_FLOAT, set_value, get_value, &wind.y,
 				NULL);
 	
-	TwAddVarRW(bar, "C0" , TW_TYPE_COLOR4F, &c0, " group='Water' ");
-	TwAddVarRW(bar, "C90" , TW_TYPE_COLOR4F, &c90, " group='Water' ");
-	TwAddVarRW(bar, "Specular" , TW_TYPE_COLOR3F, &specular, " group='Sun' ");
-	TwAddVarRW(bar, "specular_strength" , TW_TYPE_FLOAT, &specular_strength, "min=0 max=200 step=5 group='Sun' ");
-	TwAddVarRW(bar, "specular_power" , TW_TYPE_FLOAT, &specular_power, "min=0 max=120 step=5 group='Sun' ");
-	TwAddButton(bar, "GEOMETRY", geometry_on_off, NULL, NULL);
+	TwAddButton(bar, "PAUSE", pause_button, NULL, NULL);
 	TwAddVarRW(bar, "LightDir", TW_TYPE_DIR3F, &sun_direction,
                " label='Light direction' opened=true  ");
 
@@ -481,9 +646,11 @@ void initTW () {
 
 int main(int argc, char ** argv)
 {
-	cuda_init();
+	fft_init();
 	cuda_init_h();
 	glutInit(&argc, argv);
+	InitializeMagick(NULL);
+
 	glutInitDisplayMode(GLUT_ACCUM | GLUT_RGBA | GLUT_DEPTH);
 	glutInitWindowSize (1000, 1000);
 	glutCreateWindow( "window" );
